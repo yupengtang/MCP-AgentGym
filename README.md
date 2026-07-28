@@ -55,13 +55,18 @@ fault provably breaks the cluster *and* the known-correct remediation provably f
 with the executable verifier recognising both states.
 
 ```
-tests/test_environment.py ......... 16 passed   (each fault breaks, then fixes)
-tests/test_mcp_protocol.py ........  7 passed   (real MCP client ↔ real server)
-tests/test_operator.py ...........  5 passed   (reconcile, idempotency, finalizer)
-tests/test_prompt_contract.py ....   8 passed   (the model can see every tool)
-tests/test_llm_policy.py .........  10 passed   (parsing, recovery, end-to-end fix)
-tests/test_reward.py ..............  8 passed   (reward ordering properties)
-                                    54 passed
+tests/test_llm_policy.py ......... 18 passed   (parsing, recovery, end-to-end fix)
+tests/test_environment.py ........ 16 passed   (each fault breaks, then fixes)
+tests/test_episode_grpo.py ....... 15 passed   (advantage algebra, loss, KL, masking)
+tests/test_prompt_contract.py .... 12 passed   (the model can see every tool)
+tests/test_storage.py ............ 10 passed   (artifact store, S3 paths via moto)
+tests/test_reward.py .............. 9 passed   (reward ordering properties)
+tests/test_cli_contract.py ........ 8 passed   (every command's --help resolves)
+tests/test_mcp_protocol.py ........ 7 passed   (real MCP client ↔ real server)
+tests/test_report_variants.py ..... 6 passed   (no two variants share a table row)
+tests/test_fidelity.py ............ 6 passed   (sim vs real processes and limits)
+tests/test_operator.py ............ 5 passed   (reconcile, idempotency, finalizer)
+                                   112 passed
 ```
 
 The prompt-contract suite exists because of the worst bug in this project: tool schemas

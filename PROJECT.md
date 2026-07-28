@@ -287,13 +287,18 @@ Kubernetes for persistent serving, stateful agent execution, and isolated incide
 - [x] Helm chart with RBAC and NetworkPolicy; OTel + Prometheus + MLflow + CI
 - [x] Expert reference line across all 12 perturbation suites × 4 splits
 - [x] Experiment report, README, 3-minute demo script
-- [x] 54 tests green, ruff clean, Helm lints
+- [x] 112 tests green, ruff clean, Helm lints
 - [x] QLoRA SFT trained; DPO and GRPO trainers written, reward verified
-- [ ] Base vs SFT evaluation matrices *(running)*
-- [ ] vLLM prefix-cache / structured-output / multi-LoRA benchmarks *(running)*
-- [ ] DPO run on mined preference pairs; GRPO run
+- [x] Base / SFT / DPO evaluation matrices across 4 splits and 7 tool-schema suites
+- [x] vLLM prefix-cache / structured-output / multi-LoRA benchmarks
+- [x] DPO run on mined preference pairs — twice, as a pair-count ablation (88 vs 435)
+- [x] Episode-level GRPO implemented and dry-run verified *(597/600 groups usable;
+      training run in flight, no result claimed from it yet)*
+- [ ] Action-level GRPO policy trained and evaluated *(trainer written, not run)*
 - [ ] SGLang backend benchmarked *(interface implemented, not yet measured)*
-- [ ] Sim-to-real fidelity table *(not started — no fidelity claim is made anywhere)*
+- [ ] Node-layer sim-to-real fidelity *(process layer validated 5/5 against real
+      processes, real `RLIMIT_AS` and real HTTP/TCP; the container layer has no
+      real-runtime comparison and no fidelity claim is made for it)*
 
 ---
 

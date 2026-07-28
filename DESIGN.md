@@ -366,9 +366,14 @@ Stated because a limitation you can name is worth more than one a reader discove
 - **The scripted expert is formulaic.** It follows a fixed investigation order per family.
   Low SFT loss on its demonstrations indicates format acquisition, not diagnostic skill —
   which is why the OOD and perturbation tables, not the loss curve, are the result.
-- **GRPO is action-level, not episode-level.** It optimises one tool call against a
-  verifiable reward; it does not credit-assign across an episode. Multi-turn GRPO would
-  need a custom rollout loop over live clusters.
+- **Episode-level GRPO is implemented but not yet trained to a reported result.**
+  `train/grpo_train.py` optimises one tool call at a time, because TRL's GRPOTrainer is
+  single-turn; `train/episode_grpo.py` closes that with a custom loop that groups *G*
+  rollouts of the same incident, standardises the verifiable episode reward within the
+  group, and applies the resulting advantage to every assistant token in the episode. It
+  needs no critic and no live cluster — the existing sharded sampler supplies the groups,
+  and 597 of 600 incidents yield a usable one. Until a training run and its evaluation
+  complete, **no number anywhere in this repository comes from it.**
 - **PromQL-lite.** `query_metrics` supports metric names and exact label matches only.
 - **Single-node control plane.** No HA, no cross-node networking.
 
