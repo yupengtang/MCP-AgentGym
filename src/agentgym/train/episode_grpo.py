@@ -199,12 +199,20 @@ def _collate(examples, tokenizer, max_len: int, counters: dict[str, int] | None 
 
 
 def _token_logprobs(model, ids, attn, targets):
-    """Log pi(target_t | prefix) for every position, shifted."""
-    import torch
+    """Log pi(target_t | prefix) for every position, shifted.
+
+    Uses `cross_entropy` rather than `log_softmax(...).gather(...)`. The obvious spelling
+    materialises a `[B, T, V]` float32 tensor -- with Qwen3's 151k vocabulary and a 12k
+    context that is ~7.5 GB for the forward and as much again held for the backward, which
+    OOMs a 44 GB card on batch size 1. `cross_entropy` is fused: it recomputes softmax in
+    the backward instead of storing it, and returns exactly the per-token negative log
+    likelihood we want.
+    """
+    import torch.nn.functional as F
 
     logits = model(input_ids=ids, attention_mask=attn).logits[:, :-1]
-    logprobs = torch.log_softmax(logits.float(), dim=-1)
-    return logprobs.gather(-1, targets.unsqueeze(-1)).squeeze(-1)
+    # transpose to [B, V, T] is a view; cross_entropy wants class-dim second.
+    return -F.cross_entropy(logits.transpose(1, 2), targets, reduction="none")
 
 
 def grpo_loss(model, batch, *, beta: float, use_ref: bool = True):
@@ -254,9 +262,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--epochs", type=float, default=1.0)
     p.add_argument("--lr", type=float, default=5e-7)
     p.add_argument("--beta", type=float, default=0.04, help="KL coefficient to the ref policy.")
-    p.add_argument("--batch-size", type=int, default=2)
-    p.add_argument("--grad-accum", type=int, default=8)
-    p.add_argument("--max-length", type=int, default=16384)
+    p.add_argument("--batch-size", type=int, default=1)
+    p.add_argument("--grad-accum", type=int, default=16)
+    # Measured over 250 sampled episodes: median 6,282 tokens, p95 8,225, max 13,064.
+    # 12,288 truncates 1.2% of episodes; 8,192 would truncate 5.6%.
+    p.add_argument("--max-length", type=int, default=12288)
     p.add_argument("--min-group", type=int, default=2)
     p.add_argument("--dry-run", action="store_true",
                    help="Compute advantages and report group statistics, then stop.")
@@ -319,6 +329,11 @@ def _train(args, examples: list[dict[str, Any]]) -> None:
             r=32, lora_alpha=64, lora_dropout=0.05, bias="none", task_type="CAUSAL_LM",
             target_modules=["q_proj", "k_proj", "v_proj", "o_proj",
                             "gate_proj", "up_proj", "down_proj"]))
+
+    # Episodes are ~6k tokens on average and every one needs a policy pass and a reference
+    # pass, so activation memory, not parameter memory, is the binding constraint here.
+    model.gradient_checkpointing_enable()
+    model.enable_input_require_grads()
     model.train()
 
     opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=args.lr)

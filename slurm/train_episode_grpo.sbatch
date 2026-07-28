@@ -35,6 +35,9 @@ SHARDS="${SHARDS:-8}"
 SAMPLE_DIR="$AGENTGYM_RUNS/egrpo-samples"
 
 export HF_HUB_OFFLINE=1 VLLM_LOGGING_LEVEL=WARNING
+# Long, variable-length episodes fragment the allocator; expandable segments let freed
+# blocks be reused across differing sequence lengths instead of stranding them.
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 mkdir -p "$OUT" "$SAMPLE_DIR"
 
 # Rollouts can be reused. The DPO sampler already drew 4 attempts per incident from this
