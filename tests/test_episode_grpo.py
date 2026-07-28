@@ -120,6 +120,46 @@ def test_group_members_stay_adjacent(monkeypatch):
         assert sum(advs) == pytest.approx(0.0, abs=1e-5)
 
 
+def test_group_shuffle_permutes_groups_but_never_splits_one(monkeypatch):
+    """Shuffling must reorder whole groups, never interleave their members.
+
+    Interleaving would scatter a group across accumulation windows, so the zero-mean
+    advantage no longer cancels inside any single update -- the variance reduction GRPO
+    exists to buy, given up silently while the run still converges.
+    """
+    from agentgym.data import curate
+    from agentgym.train.episode_grpo import build_examples, shuffle_by_group
+
+    monkeypatch.setattr(curate, "_messages_for", lambda t: [{"role": "user", "content": ""}])
+
+    trajs = [FakeTraj(inc, r) for inc in "abcdefgh" for r in (0.0, 1.0, 2.0, 3.0)]
+    scored, _ = group_advantages(trajs)
+    examples = build_examples(scored)
+
+    shuffled = shuffle_by_group(examples, seed=7)
+
+    # Same episodes, no loss or duplication.
+    assert len(shuffled) == len(examples)
+    assert sorted(id(e) for e in shuffled) == sorted(id(e) for e in examples)
+
+    # Still exactly one contiguous run per incident.
+    runs = [k for k, _ in groupby(e["incident_id"] for e in shuffled)]
+    assert len(runs) == len(set(runs)) == 8, f"a group was split: {runs}"
+
+    # Members keep their own advantages, and each group still sums to zero.
+    for inc in "abcdefgh":
+        advs = [e["advantage"] for e in shuffled if e["incident_id"] == inc]
+        assert len(advs) == 4
+        assert sum(advs) == pytest.approx(0.0, abs=1e-5)
+
+    # It actually reorders, and does so deterministically for a given seed.
+    assert runs != [k for k, _ in groupby(e["incident_id"] for e in examples)]
+    assert [e["incident_id"] for e in shuffle_by_group(examples, seed=7)] == \
+           [e["incident_id"] for e in shuffled]
+    assert [e["incident_id"] for e in shuffle_by_group(examples, seed=8)] != \
+           [e["incident_id"] for e in shuffled]
+
+
 def test_stats_round_trip_to_dict():
     _, stats = group_advantages([FakeTraj("i", 1.0), FakeTraj("i", 2.0)])
     d = stats.as_dict()

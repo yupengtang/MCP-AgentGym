@@ -41,6 +41,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import random
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -121,6 +122,34 @@ def group_advantages(
     stats.mean_abs_advantage = round(sum(advs) / len(advs), 4) if advs else 0.0
     stats.reward_range = (round(lo, 3), round(hi, 3)) if out else (0.0, 0.0)
     return out, stats
+
+
+def shuffle_by_group(examples: list[dict[str, Any]], seed: int) -> list[dict[str, Any]]:
+    """Permute the order of incident groups while keeping each group contiguous.
+
+    Not shuffling at all preserves the property the accumulation window needs -- group
+    members adjacent, so the zero-mean advantage cancels inside each update -- but it also
+    means consecutive optimizer steps see systematically different incidents. The loss
+    curve then confounds *training progress* with *which incidents live in this stretch of
+    the dataset*, and a run of same-signed `pg` values reads as a trend when it is really
+    a property of the ordering.
+
+    Shuffling whole groups keeps the variance reduction and removes the confound. Shuffling
+    individual episodes would keep the confound away but destroy the cancellation, which is
+    the trade this function exists to avoid making.
+    """
+    order: list[str] = []
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for ex in examples:
+        key = ex["incident_id"]
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(ex)
+
+    rng = random.Random(seed)
+    rng.shuffle(order)
+    return [ex for key in order for ex in groups[key]]
 
 
 def build_examples(scored: list[tuple[Any, float]]) -> list[dict[str, Any]]:
@@ -282,6 +311,8 @@ def parse_args() -> argparse.Namespace:
     # 12,288 truncates 1.2% of episodes; 8,192 would truncate 5.6%.
     p.add_argument("--max-length", type=int, default=12288)
     p.add_argument("--min-group", type=int, default=2)
+    p.add_argument("--seed", type=int, default=0,
+                   help="Seeds the per-epoch group shuffle.")
     p.add_argument("--dry-run", action="store_true",
                    help="Compute advantages and report group statistics, then stop.")
     return p.parse_args()
@@ -376,15 +407,15 @@ def _train(args, examples: list[dict[str, Any]]) -> None:
     counters: dict[str, int] = {}
     step = 0
     for epoch in range(max(1, int(args.epochs))):
-        # Deliberately NOT shuffled. Advantages are zero-mean within an incident's group,
-        # so as long as group members stay adjacent, each accumulation window spans whole
-        # groups and the baseline cancels inside it -- which is the variance reduction GRPO
-        # exists to buy. Shuffling scatters group members across windows, leaving each
-        # update with an uncancelled mean; the run still converges, just noisily, and
-        # nothing reports the difference. `test_group_members_stay_adjacent` pins the
-        # ordering that makes this true.
-        for i in range(0, len(examples), args.batch_size):
-            batch = _collate(examples[i:i + args.batch_size], tokenizer,
+        # Shuffle whole groups, never individual episodes. Advantages are zero-mean within
+        # an incident's group, so group members must stay adjacent for each accumulation
+        # window to span whole groups and cancel the baseline inside it -- that is the
+        # variance reduction GRPO exists to buy, and scattering members across windows
+        # would silently give up on it. Permuting group *order* keeps that intact while
+        # removing the confound of consecutive steps always seeing the same incidents.
+        epoch_examples = shuffle_by_group(examples, seed=args.seed + epoch)
+        for i in range(0, len(epoch_examples), args.batch_size):
+            batch = _collate(epoch_examples[i:i + args.batch_size], tokenizer,
                              args.max_length, counters)
             if batch is None:
                 continue
