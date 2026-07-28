@@ -76,7 +76,7 @@ text the model receives. See [reports/EXPERIMENTS.md](reports/EXPERIMENTS.md).
 | | |
 |---|---|
 | Incidents generated | 1,200 (4 held-out splits) |
-| Trajectories executed and verified | **4,092** |
+| Trajectories executed and verified | **11,541** |
 | Control plane start | ~13 s (amortised over hundreds of episodes) |
 | Median episode wall time | **2.4 s** |
 | GPU cost of the environment | **zero** — CPU only |
@@ -141,11 +141,19 @@ Fixing it moved the same adapter from **3.1% → 29.3%** resolution and **89.8% 
 invalid tool calls, with no retraining.
 
 The lesson worth keeping is not "SFT is hard". It is that **a plausible number moving in
-the direction you expect is the most dangerous output a system can produce.** Eleven
-defects in this project failed exactly that way — silently, with believable results (see
-[reports/EXPERIMENTS.md](reports/EXPERIMENTS.md)). Each now has an assertion holding it
-shut; the train/inference renderers, for instance, are pinned to each other by a test that
-fails if they ever diverge again.
+the direction you expect is the most dangerous output a system can produce.** Every defect
+recorded in [reports/EXPERIMENTS.md](reports/EXPERIMENTS.md) failed exactly that way —
+silently, with believable results, and several of them flattering. Each now has an
+assertion or a counter holding it shut; the train/inference renderers, for instance, are
+pinned to each other by a test that fails if they ever diverge again.
+
+The pattern is stubborn enough that it recurs under active guard. Building episode-level
+GRPO, **all 15 of its unit tests passed before the first training run, and the first three
+attempts still failed** — an OOM invisible at the tests' 8-token vocabulary, a KL reference
+pointing at the wrong policy while the docstring asserted otherwise, and silent truncation
+that handed a full episode's credit to a prefix. The fix for the first left all 15 tests
+passing *unchanged*, which is at once the evidence the rewrite was equivalent and the
+evidence they could never have caught it.
 
 ### What SFT actually bought, once the harness was correct
 

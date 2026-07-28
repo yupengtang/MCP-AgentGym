@@ -281,7 +281,7 @@ Kubernetes for persistent serving, stateful agent execution, and isolated incide
 - [x] 4 MCP servers, **36** typed tools, real MCP protocol (7 compliance tests)
 - [x] 14 fault families, 1,200 seeded incidents, held-out splits
 - [x] Real Kubernetes control plane, deterministic reset, parallel episodes
-- [x] **4,092** executed and programmatically verified trajectories
+- [x] **11,541** executed and programmatically verified trajectories
 - [x] Verifiable episode reward + verifiable action reward, ordering asserted by tests
 - [x] `IncidentRun` operator reconciling end to end (idempotency, finalizer, ownerRefs)
 - [x] Helm chart with RBAC and NetworkPolicy; OTel + Prometheus + MLflow + CI

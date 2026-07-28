@@ -66,12 +66,19 @@ removes the episode namespace before releasing the object.
 | Quantity | Measured |
 |---|---|
 | Incidents generated | 1,200 across 4 splits |
-| Trajectories executed and verified | 4,092 |
+| Trajectories executed and verified | 11,541 |
+| — of which back the reported tables | 5,383 |
 | Control-plane start | 11–13 s |
 | Median episode wall time | 2.4 s |
 | Full 1,200-episode rollout | ~5 min wall (16-way CPU array) |
 | Environment GPU cost | zero |
 | QLoRA SFT, Qwen3-8B, 3 epochs, 614 examples | 1 h 29 m, one L40S |
+
+Composition of the 11,541, so the figure is auditable rather than impressive: 5,383 in the
+evaluation tree (the trajectories every table above is computed from), 2,558 expert
+large-scale rollouts, 2,400 DPO/GRPO sampling episodes, and 1,200 expert clean rollouts.
+The concatenated copies that sharded jobs leave behind, and the sampling set reused by
+episode-GRPO, are counted once rather than twice.
 
 An episode costs ~2.4 s on a CPU core. That is the number that makes post-training
 viable: the same workload on a real cluster would be minutes per episode and would not
