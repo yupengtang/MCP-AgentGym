@@ -70,17 +70,34 @@ echo "engine ready"
 # sweep and is the variant the regression is measured against. The variant label on each
 # trajectory is derived from the served model name, so the names above are chosen to make
 # `_variant_of` produce one distinct row per scale.
+# Rollout is latency-bound on the model, not compute-bound on the environment, so a single
+# process leaves the engine's batch nearly empty. Measured unsharded: 3 episodes in 18
+# minutes, which puts this sweep at ~64 hours. This is the same defect as the DPO sampler's
+# `--shard-total 1` (reports/EXPERIMENTS.md) -- it never errors, it is only slow, which is
+# why it is easy to write a second time.
+SHARDS="${SHARDS:-8}"
 FAILED=0
 for SERVED in "$MODEL" dpo5s025 dpo5s05 dpo5s075 dpo5s10; do
   VARIANT="$SERVED"; [ "$SERVED" = "$MODEL" ] && VARIANT="base"
   for split in $SPLITS; do
     dest="$OUT/$VARIANT-$split-clean.jsonl"
-    echo "--- $VARIANT / $split ---"
-    python -m agentgym.cli rollout \
-      --policy llm --split "$split" --perturbation clean \
-      --limit "$LIMIT" --temperature 0.0 --max-steps 24 \
-      --base-url "http://127.0.0.1:$PORT/v1" --model "$SERVED" \
-      --out "$dest" || true
+    echo "--- $VARIANT / $split ($SHARDS shards) ---"
+    rm -f "$OUT/.part-$VARIANT-$split-"*.jsonl
+    pids=()
+    for s in $(seq 0 $((SHARDS - 1))); do
+      python -m agentgym.cli rollout \
+        --policy llm --split "$split" --perturbation clean \
+        --limit "$LIMIT" --temperature 0.0 --max-steps 24 \
+        --shard-index "$s" --shard-total "$SHARDS" \
+        --gym-offset $((520 + s * 3)) \
+        --base-url "http://127.0.0.1:$PORT/v1" --model "$SERVED" \
+        --out "$OUT/.part-$VARIANT-$split-$s.jsonl" \
+        > "$OUT/log-$VARIANT-$split-$s.txt" 2>&1 &
+      pids+=($!)
+    done
+    for p in "${pids[@]}"; do wait "$p" || echo "  (a shard failed; continuing)"; done
+    cat "$OUT/.part-$VARIANT-$split-"*.jsonl > "$dest" 2>/dev/null || true
+    echo "  -> $(wc -l < "$dest" 2>/dev/null || echo 0) episodes"
     # An empty cell must fail the job. A silently missing cell once produced a complete
     # -looking report built entirely from stale files.
     if [ ! -s "$dest" ]; then echo "EMPTY CELL: $VARIANT/$split"; FAILED=1; fi

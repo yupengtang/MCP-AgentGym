@@ -466,7 +466,19 @@ Stated as open rather than quietly omitted.
 
 ## Engineering notes worth keeping
 
-Four problems that cost real time and had non-obvious answers.
+Five problems that cost real time and had non-obvious answers.
+
+**The serial-rollout bug, written twice.** The adapter-scale sweep was submitted with an
+unsharded rollout loop and measured 3 episodes in 18 minutes — about 64 hours for the full
+sweep, against roughly 4 once sharded eight ways. This is exactly the defect described
+above as the DPO sampler's `--shard-total 1`, in the same repository that documents it,
+committed by the same author who wrote that section. It is worth keeping rather than
+quietly fixing, because the reason it recurs is structural: **a missing shard flag produces
+no error, no warning and no wrong number — only slowness**, and slowness reads as a
+property of the model or the cluster rather than as a bug in the harness. Correctness bugs
+get caught by assertions; throughput bugs need someone to hold a stopwatch against an
+expectation. The sweep script now shards by default and prints the episode count per cell,
+so a collapsed batch shows up as a number rather than as patience.
 
 **A test that measured machine load.** `test_fault_breaks_then_fixes` applied each fault's
 known-correct fix and then advanced a fixed 24 ticks before asserting resolution. It passed
