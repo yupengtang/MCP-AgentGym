@@ -385,19 +385,82 @@ two views of the same weight update.
 
 *(Sweep submitted as job 5545522; results recorded here when it lands.)*
 
+## 6e. Episode-level GRPO
+
+`grpo_train.py` optimises one *action*: TRL's GRPOTrainer samples a group of completions
+for a single prompt, so the prompt is the conversation up to some step and the completion
+is the next tool call. The reward is genuinely verifiable, but it cannot express what makes
+agent RL hard — an episode is twenty-odd calls whose value is known only at the end.
+
+`src/agentgym/train/episode_grpo.py` closes that. The group is *G* full rollouts of the
+same incident, the reward is the episode's verifiable reward — the same number §5 reports —
+and the advantage is group-relative:
+
+```
+A_i = (R_i - mean(R_group)) / (std(R_group) + eps)
+```
+
+which is GRPO's defining move: the group mean replaces a learned value function, so there
+is no critic to train. That advantage multiplies every assistant token in episode *i*,
+making the credit assignment episode-level rather than per-action.
+
+**It extracts far more signal from the same rollouts than DPO does.** Run over the 2,400
+episodes already sampled for DPO:
+
+```
+trajectories               2400
+groups_seen                 600
+groups_kept                 597      99.5%
+dropped_no_reward_spread      3
+episodes_kept              2388
+mean_group_std             0.856
+mean_abs_advantage         0.896
+reward_range        [-1.10, 3.05]
+```
+
+**435 DPO pairs versus 2,388 GRPO episodes across 597 groups from identical data** — 5.5×
+the training signal, because a preference pair keeps only a best/worst couple that clears a
+margin, while a group uses the entire reward distribution.
+
+Two implementation details are load-bearing and both are pinned by tests:
+
+* **Length normalisation.** Dividing by the assistant-token count stops the objective
+  preferring long episodes whenever the advantage is positive — a bias that surfaces as the
+  agent padding its reasoning to farm reward. `test_loss_is_length_normalised` asserts that
+  doubling episode length at equal per-token likelihood leaves the loss unchanged.
+* **Degenerate groups are dropped, not zeroed.** When every rollout of an incident earns
+  the same reward the advantage is 0/0; keeping those as zeros silently shrinks the
+  effective batch while the step count claims otherwise — the same fail-open shape as the
+  sampling bug above. They are removed and counted (3 of 600 here).
+
+One bug was caught before it ever ran: the policy forward was written inside
+`model.disable_adapter()`, which would have trained the adapter on gradients computed
+without it. It raises nothing and still produces a model — so
+`test_policy_forward_runs_with_adapter_enabled` now pins it.
+
+12 tests cover the advantage algebra (group-scoped, zero-mean, unit-scale, ordering
+preserved), the loss direction under positive and negative advantage, length invariance,
+KL non-negativity, and mask correctness. `slurm/train_episode_grpo.sbatch` runs the full
+sample-then-train loop.
+
 ## 7. Open items
 
 Stated as open rather than quietly omitted.
 
-- **Model evaluation across splits and suites** (base vs SFT) — jobs queued; tables are
-  populated by the same `eval.report` pipeline that produced §5.
-- **DPO** — pairs come from sampling the SFT policy at temperature on training incidents
-  and ranking by verified reward. The expert produces one attempt per incident, so it
-  yields no pairs by construction (measured: 0).
-- **GRPO** — the deterministic simulator and executable reward make this the natural next
-  step; not yet run.
-- **Sim-to-real fidelity** — no real-cluster comparison has been run, so no fidelity claim
-  is made anywhere in this repository.
+- **Episode-level GRPO is implemented and dry-run verified on 2,388 episodes, but a full
+  training run has not been executed** — the loop is a sample-then-train job whose cost is
+  dominated by rollout, and it has not yet been given the GPU hours. No result from it is
+  claimed anywhere.
+- **Action-level GRPO** (`grpo_train.py`) is implemented but its trained policy has not
+  been evaluated in the tables above.
+- **Node-layer sim-to-real fidelity.** `src/agentgym/fidelity.py` validates the process
+  layer against real processes, real `RLIMIT_AS` kernel enforcement and real HTTP/TCP
+  (5/5 agreement on readiness *and* reason). The container/kubelet layer has no real-runtime
+  comparison, because no container runtime is available on this cluster — so no fidelity
+  claim is made for it.
+- **AWS.** S3 code paths are tested against `moto`, and the EKS overlay is validated with
+  `helm lint`/`template`. Live EKS/IAM/network verification is pending
+  `scripts/verify_aws.py` being run where credentials exist.
 
 ---
 

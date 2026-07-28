@@ -446,6 +446,26 @@ nothing parseable (−0.5 vs 0.0). A smaller penalty would leave the model bette
 confidently deleting a pod than staying quiet — the wrong lesson for an agent holding
 production credentials. `tests/test_reward.py` asserts that ordering.
 
+**Episode-level GRPO.** Action-level optimisation cannot credit-assign across a whole
+incident, so `agentgym/train/episode_grpo.py` groups *G* rollouts of the **same** incident
+and standardises the episode reward within the group:
+
+```
+A_i = (R_i − mean(R_group)) / (std(R_group) + ε)
+```
+
+The group mean replaces a learned value function — no critic — and the advantage weights
+every assistant token in that episode. Over the 2,400 rollouts already sampled for DPO it
+keeps **597 of 600 groups (2,388 episodes)**, against **435 DPO pairs from the same data**:
+5.5× the training signal, because a preference pair keeps one best/worst couple above a
+margin while a group uses the whole reward distribution.
+
+Length normalisation and degenerate-group dropping are both load-bearing and both pinned by
+tests — without the first the objective prefers long episodes whenever the advantage is
+positive, and without the second empty groups dilute batches while the step count claims
+otherwise. Implemented and dry-run verified; **a full training run has not been executed,
+and no result from it is claimed.**
+
 ---
 
 ## Known limitations
@@ -462,3 +482,10 @@ Stated because a limitation you can name is worth more than one a reader finds.
 - **Single-node control plane.** No HA, no multi-tenancy, no cross-node networking.
 - **Compositional incidents inherit the primary fault's safety policy**, so unsafe-action
   accounting is slightly conservative on that split.
+- **Post-training regresses on held-out fault families** (29–31% vs 48.4% for base). The
+  mechanism is measured, not guessed: SFT and DPO emit the two never-demonstrated diagnosis
+  labels **0 times in ~600 submissions** against 5.0% for base, despite both labels being in
+  the tool enum on every episode. That is label-prior collapse from closed-catalogue
+  fine-tuning; `scripts/scale_adapter.py` attenuates the update to trade against it.
+- **Episode-level GRPO is implemented and dry-run verified but not trained.** No number in
+  this README comes from it.
