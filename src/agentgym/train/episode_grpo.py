@@ -376,6 +376,13 @@ def _train(args, examples: list[dict[str, Any]]) -> None:
     counters: dict[str, int] = {}
     step = 0
     for epoch in range(max(1, int(args.epochs))):
+        # Deliberately NOT shuffled. Advantages are zero-mean within an incident's group,
+        # so as long as group members stay adjacent, each accumulation window spans whole
+        # groups and the baseline cancels inside it -- which is the variance reduction GRPO
+        # exists to buy. Shuffling scatters group members across windows, leaving each
+        # update with an uncancelled mean; the run still converges, just noisily, and
+        # nothing reports the difference. `test_group_members_stay_adjacent` pins the
+        # ordering that makes this true.
         for i in range(0, len(examples), args.batch_size):
             batch = _collate(examples[i:i + args.batch_size], tokenizer,
                              args.max_length, counters)

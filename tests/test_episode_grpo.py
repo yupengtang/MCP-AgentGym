@@ -8,6 +8,7 @@ produce a model rather than an error. Each property below is asserted rather tha
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import groupby
 
 import pytest
 
@@ -77,6 +78,46 @@ def test_single_attempt_group_is_dropped_and_counted():
     scored, stats = group_advantages([FakeTraj("lonely", 2.0)])
     assert scored == []
     assert stats.dropped_too_small == 1
+
+
+def test_group_members_stay_adjacent(monkeypatch):
+    """Episodes from one incident must come out contiguous.
+
+    The training loop accumulates gradients without shuffling, which is what lets each
+    accumulation window span whole groups so the zero-mean advantage cancels inside it --
+    the variance reduction GRPO exists to buy. If `group_advantages` or `build_examples`
+    ever interleaves groups, that cancellation quietly stops happening: the run still
+    converges, just noisily, and no test or metric reports the change.
+    """
+    from agentgym.data import curate
+    from agentgym.train.episode_grpo import build_examples
+
+    # Rendering the real chat history needs a full Trajectory; ordering is what is under
+    # test here, so the renderer is stubbed out.
+    monkeypatch.setattr(curate, "_messages_for", lambda t: [{"role": "user", "content": ""}])
+
+    trajs = []
+    for inc in ("a", "b", "c"):
+        for r in (0.0, 1.0, 2.0, 3.0):
+            trajs.append(FakeTraj(inc, r))
+    scored, stats = group_advantages(trajs)
+    assert stats.groups_kept == 3
+
+    order = [t.incident_id for t, _ in scored]
+    # Each incident occupies exactly one contiguous run.
+    runs = [k for k, _ in groupby(order)]
+    assert len(runs) == len(set(runs)) == 3, f"groups interleaved: {order}"
+
+    examples = build_examples(scored)
+    ex_order = [e["incident_id"] for e in examples]
+    ex_runs = [k for k, _ in groupby(ex_order)]
+    assert len(ex_runs) == len(set(ex_runs)) == 3
+
+    # And each contiguous run's advantages still sum to zero, which is the property the
+    # accumulation window relies on.
+    for inc in ("a", "b", "c"):
+        advs = [e["advantage"] for e in examples if e["incident_id"] == inc]
+        assert sum(advs) == pytest.approx(0.0, abs=1e-5)
 
 
 def test_stats_round_trip_to_dict():
