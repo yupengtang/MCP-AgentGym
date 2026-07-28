@@ -20,8 +20,11 @@ from typing import Any
 from agentgym.data import trajectory as traj_mod
 from agentgym.data.trajectory import Trajectory
 
+# Serve episode-level GRPO as `grpo-episode`, which normalises to `grpoepisode`. Names
+# like `egrpo` or `episode-grpo` normalise to plain `grpo` and would silently merge it into
+# the action-level row -- one number describing two different policies.
 VARIANT_ORDER = ["expert-scripted", "base", "prompted", "sft",
-                 "dpo", "dpo5", "grpo"]
+                 "dpo", "dpo5", "grpo", "grpoepisode"]
 SUITE_ORDER = ["clean", "rename", "paraphrase", "arg_rename", "extra_required_arg",
                "retype_arg", "distractors", "server_dropout", "malformed",
                "truncation", "flaky", "combined"]
