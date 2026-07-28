@@ -36,6 +36,17 @@ SAMPLE_DIR="$AGENTGYM_RUNS/egrpo-samples"
 
 export HF_HUB_OFFLINE=1 VLLM_LOGGING_LEVEL=WARNING
 mkdir -p "$OUT" "$SAMPLE_DIR"
+
+# Rollouts can be reused. The DPO sampler already drew 4 attempts per incident from this
+# same SFT policy at temperature, which is exactly what phase 1 produces -- so pointing
+# SAMPLES_FILE at them makes the first GRPO iteration on-policy without paying for the
+# sampling twice. Later iterations must re-sample, because the policy has moved.
+if [ -n "${SAMPLES_FILE:-}" ]; then
+  [ -s "$SAMPLES_FILE" ] || { echo "SAMPLES_FILE is empty or missing: $SAMPLES_FILE"; exit 1; }
+  echo "=== phase 1 skipped: reusing $(wc -l < "$SAMPLES_FILE") episodes from $SAMPLES_FILE ==="
+  cp "$SAMPLES_FILE" "$SAMPLE_DIR/samples.jsonl"
+else
+
 rm -f "$SAMPLE_DIR"/samples*.jsonl
 
 echo "=== phase 1: roll out $GROUP attempts per incident ==="
@@ -80,6 +91,8 @@ echo "sampled $n episodes across $SHARDS shards"
 
 stop_engine
 trap - EXIT
+
+fi
 
 echo "=== phase 2: group-relative advantages + policy gradient ==="
 python -m agentgym.train.episode_grpo \

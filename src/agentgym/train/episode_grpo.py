@@ -145,10 +145,17 @@ def build_examples(scored: list[tuple[Any, float]]) -> list[dict[str, Any]]:
     ]
 
 
-def _collate(examples, tokenizer, max_len: int):
-    """Tokenise with a loss mask over the assistant's own tokens only."""
+def _collate(examples, tokenizer, max_len: int, counters: dict[str, int] | None = None):
+    """Tokenise with a loss mask over the assistant's own tokens only.
+
+    Truncation is counted, not silent. An episode cut at `max_len` keeps its group-relative
+    advantage but loses its later turns -- including, often, the one that resolved the
+    incident -- so the gradient says "this prefix earned +A" about a prefix that did not.
+    It trains fine and reports nothing, so the count is surfaced instead.
+    """
     import torch
 
+    counters = counters if counters is not None else {}
     input_ids, masks, advantages = [], [], []
     for ex in examples:
         enc = tokenizer.apply_chat_template(
@@ -160,10 +167,13 @@ def _collate(examples, tokenizer, max_len: int):
             truncation=True,
         )
         ids = enc["input_ids"]
+        if len(ids) >= max_len:
+            counters["truncated"] = counters.get("truncated", 0) + 1
         assistant_mask = enc.get("assistant_masks")
         if assistant_mask is None or not any(assistant_mask):
             # No assistant tokens survived: the example contributes nothing but would still
             # count toward the batch. Skip it rather than divide by zero later.
+            counters["no_assistant_tokens"] = counters.get("no_assistant_tokens", 0) + 1
             continue
         input_ids.append(torch.tensor(ids))
         masks.append(torch.tensor(assistant_mask))
@@ -316,10 +326,12 @@ def _train(args, examples: list[dict[str, Any]]) -> None:
     print(f"episodes={len(examples)} optimizer_steps={max(1, steps)}")
 
     log: list[dict[str, Any]] = []
+    counters: dict[str, int] = {}
     step = 0
     for epoch in range(max(1, int(args.epochs))):
         for i in range(0, len(examples), args.batch_size):
-            batch = _collate(examples[i:i + args.batch_size], tokenizer, args.max_length)
+            batch = _collate(examples[i:i + args.batch_size], tokenizer,
+                             args.max_length, counters)
             if batch is None:
                 continue
             batch = {k: v.to(model.device) for k, v in batch.items()}
@@ -338,7 +350,16 @@ def _train(args, examples: list[dict[str, Any]]) -> None:
 
     model.save_pretrained(str(args.output_dir))
     tokenizer.save_pretrained(str(args.output_dir))
-    (args.output_dir / "train_log.json").write_text(json.dumps(log, indent=2))
+    seen = len(examples) * max(1, int(args.epochs))
+    counters["episodes_seen"] = seen
+    counters["truncation_rate"] = round(counters.get("truncated", 0) / max(1, seen), 4)
+    (args.output_dir / "train_log.json").write_text(
+        json.dumps({"steps": log, "counters": counters}, indent=2))
+    print(json.dumps(counters, indent=2))
+    if counters["truncation_rate"] > 0.25:
+        print(f"WARNING: {counters['truncation_rate']:.1%} of episodes hit the "
+              f"{args.max_length}-token cap. Their advantage is applied to a prefix that "
+              "may exclude the turn that resolved the incident; raise --max-length.")
     print(f"episode-level GRPO complete -> {args.output_dir}")
 
 
