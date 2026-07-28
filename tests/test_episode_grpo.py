@@ -89,7 +89,7 @@ def test_stats_round_trip_to_dict():
 # --- loss ---------------------------------------------------------------------
 
 class _StubModel:
-    """Returns fixed logits; `disable_adapter` swaps in a different set as the reference."""
+    """Returns fixed logits; `ref_context()` swaps in a different set as the reference."""
 
     def __init__(self, logits, ref_logits=None):
         self._logits = logits
@@ -106,7 +106,7 @@ class _StubModel:
             logits = out
         return _O()
 
-    def disable_adapter(self):
+    def ref_context(self):
         model = self
 
         class _Ctx:
@@ -137,7 +137,7 @@ def test_policy_forward_runs_with_adapter_enabled():
     vocab, seq, bs = 8, 6, 2
     logits = torch.randn(bs, seq, vocab)
     model = _StubModel(logits)
-    grpo_loss(model, _batch([1.0, -1.0]), beta=0.1)
+    grpo_loss(model, _batch([1.0, -1.0]), beta=0.1, ref_context=model.ref_context)
     assert model.saw_policy_pass_with_adapter
     assert model._adapter_on, "adapter must be re-enabled after the reference pass"
 
@@ -196,12 +196,48 @@ def test_loss_is_length_normalised():
 def test_kl_is_zero_against_identical_reference_and_positive_otherwise():
     vocab, seq, bs = 8, 6, 2
     same = torch.randn(bs, seq, vocab)
-    _, parts = grpo_loss(_StubModel(same, same), _batch([1.0, -1.0]), beta=0.1)
+    m = _StubModel(same, same)
+    _, parts = grpo_loss(m, _batch([1.0, -1.0]), beta=0.1, ref_context=m.ref_context)
     assert parts["kl"] == pytest.approx(0.0, abs=1e-5)
 
-    _, parts2 = grpo_loss(_StubModel(same, torch.randn(bs, seq, vocab)),
-                          _batch([1.0, -1.0]), beta=0.1)
+    m2 = _StubModel(same, torch.randn(bs, seq, vocab))
+    _, parts2 = grpo_loss(m2, _batch([1.0, -1.0]), beta=0.1, ref_context=m2.ref_context)
     assert parts2["kl"] > 0.0, "k3 estimator must be non-negative and non-trivial"
+
+
+def test_kl_does_not_swamp_the_policy_gradient_at_step_zero():
+    """Regression, measured in job 5545540.
+
+    The reference was taken as the *base* model (`disable_adapter()`) while the policy
+    started from the SFT adapter, so KL(SFT || base) was already enormous before any
+    update. At beta=0.04 the penalty was three orders of magnitude above the policy
+    gradient -- pg = -0.86 against beta*KL = 1298.9 -- and the run optimised "return to
+    base" instead of "improve the policy".
+
+    The reference must be the policy training started from, which makes the KL exactly
+    zero on the first step. This asserts the *relationship*, not just that the code runs.
+    """
+    vocab, seq, bs = 8, 6, 2
+    policy = torch.randn(bs, seq, vocab)
+    m = _StubModel(policy, policy)  # reference == starting policy
+    loss, parts = grpo_loss(m, _batch([1.0, -1.0]), beta=0.04,
+                            ref_context=m.ref_context)
+    assert parts["kl"] == pytest.approx(0.0, abs=1e-5)
+    assert float(loss) == pytest.approx(parts["pg_loss"], abs=1e-5), \
+        "at step 0 the objective must be the policy gradient alone"
+
+
+def test_kl_estimator_is_finite_under_extreme_log_ratios():
+    """A fine-tuned policy and its reference can disagree by many nats on rare tokens.
+    Unclamped, exp(log-ratio) overflows and the loss becomes inf/nan mid-run."""
+    vocab, seq, bs = 8, 6, 2
+    policy = torch.zeros(bs, seq, vocab)
+    extreme = torch.zeros(bs, seq, vocab)
+    extreme[:, :, 0] = 500.0  # reference is wildly confident on one token
+    m = _StubModel(policy, extreme)
+    loss, parts = grpo_loss(m, _batch([1.0, -1.0]), beta=0.04, ref_context=m.ref_context)
+    assert torch.isfinite(loss).all()
+    assert parts["kl"] >= 0.0
 
 
 def test_masked_prefix_tokens_do_not_contribute():

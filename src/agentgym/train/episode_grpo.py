@@ -215,14 +215,28 @@ def _token_logprobs(model, ids, attn, targets):
     return -F.cross_entropy(logits.transpose(1, 2), targets, reduction="none")
 
 
-def grpo_loss(model, batch, *, beta: float, use_ref: bool = True):
+# log-ratio clamp for the k3 estimator. exp() of an unclamped log-ratio overflows long
+# before the KL it represents is meaningful; +-10 already corresponds to a probability
+# ratio of ~22,000.
+MAX_LOG_RATIO = 10.0
+
+
+def grpo_loss(model, batch, *, beta: float, ref_context=None):
     """Length-normalised, advantage-weighted NLL over assistant tokens, plus KL.
 
-    The reference policy is this same model with the LoRA adapter disabled, so the KL is
-    measured against the policy being improved without holding a second copy of the weights
-    in memory. The policy forward must happen with the adapter *enabled* -- computing it
-    inside the `disable_adapter()` context would train the adapter on gradients taken
-    without it, which converges to something, just not to the objective written down here.
+    `ref_context` is a zero-argument callable returning a context manager under which the
+    model evaluates as the **reference policy**. That reference must be the policy training
+    started from -- here, the SFT adapter -- so the KL is zero at step 0 and measures drift
+    caused by this run.
+
+    It must *not* be `model.disable_adapter`, which yields the base model: KL(SFT || base)
+    is large before a single step is taken, and at beta=0.04 it dominated the objective by
+    three orders of magnitude (measured: pg = -0.86 against beta*KL = 1298.9), so the run
+    optimised "return to base" rather than "improve the policy".
+
+    The policy forward must happen outside `ref_context` -- computing it inside would train
+    the adapter on gradients taken from a different set of weights, which converges to
+    something, just not to the objective written here.
     """
     import torch
 
@@ -240,11 +254,11 @@ def grpo_loss(model, batch, *, beta: float, use_ref: bool = True):
     pg = -(adv.to(seq_logprob.device) * seq_logprob).mean()
 
     kl = torch.zeros((), device=pg.device)
-    if use_ref and beta > 0:
-        with torch.no_grad(), model.disable_adapter():
+    if ref_context is not None and beta > 0:
+        with torch.no_grad(), ref_context():
             ref_chosen = _token_logprobs(model, ids, attn, targets)
         # k3 estimator: non-negative and lower variance than the raw log-ratio.
-        diff = ref_chosen - chosen
+        diff = (ref_chosen - chosen).clamp(-MAX_LOG_RATIO, MAX_LOG_RATIO)
         per_tok = torch.exp(diff) - diff - 1.0
         kl = ((per_tok * tok_mask).sum(dim=1) / denom).mean()
 
@@ -320,10 +334,28 @@ def _train(args, examples: list[dict[str, Any]]) -> None:
         args.model, quantization_config=quant, dtype=torch.bfloat16, device_map="auto")
     model.config.use_cache = False
 
+    ref_context = None
     if args.sft_adapter:
-        # Start from the SFT policy and keep a frozen copy of it as the KL reference, so
-        # the penalty is measured against the policy we are actually improving.
-        model = PeftModel.from_pretrained(model, str(args.sft_adapter), is_trainable=True)
+        # Load the SFT adapter twice: `default` trains, `reference` stays frozen. Switching
+        # between them makes the KL reference the policy this run started from, at the cost
+        # of one extra LoRA (a few tens of MB) rather than a second copy of the base model.
+        model = PeftModel.from_pretrained(model, str(args.sft_adapter),
+                                          adapter_name="default", is_trainable=True)
+        model.load_adapter(str(args.sft_adapter), adapter_name="reference",
+                           is_trainable=False)
+        model.set_adapter("default")
+
+        from contextlib import contextmanager
+
+        @contextmanager
+        def _as_reference():
+            model.set_adapter("reference")
+            try:
+                yield
+            finally:
+                model.set_adapter("default")
+
+        ref_context = _as_reference
     else:
         model = get_peft_model(model, LoraConfig(
             r=32, lora_alpha=64, lora_dropout=0.05, bias="none", task_type="CAUSAL_LM",
@@ -350,7 +382,8 @@ def _train(args, examples: list[dict[str, Any]]) -> None:
             if batch is None:
                 continue
             batch = {k: v.to(model.device) for k, v in batch.items()}
-            loss, parts = grpo_loss(model, batch, beta=args.beta)
+            loss, parts = grpo_loss(model, batch, beta=args.beta,
+                                    ref_context=ref_context)
             (loss / args.grad_accum).backward()
             if (i // args.batch_size + 1) % args.grad_accum == 0:
                 torch.nn.utils.clip_grad_norm_(
@@ -363,7 +396,8 @@ def _train(args, examples: list[dict[str, Any]]) -> None:
                           f"pg={parts['pg_loss']:.4f} kl={parts['kl']:.4f}", flush=True)
                     log.append({"step": step, "loss": float(loss), **parts})
 
-    model.save_pretrained(str(args.output_dir))
+    # Save only the trained adapter; `reference` is a frozen duplicate of the input.
+    model.save_pretrained(str(args.output_dir), selected_adapters=["default"])
     tokenizer.save_pretrained(str(args.output_dir))
     seen = len(examples) * max(1, int(args.epochs))
     counters["episodes_seen"] = seen
