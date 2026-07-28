@@ -390,7 +390,52 @@ in-distribution and held-out-fault splits. One knob, one engine load, and it ans
 directly whether the in-distribution gain and the held-out regression are separable or are
 two views of the same weight update.
 
-*(Sweep submitted as job 5545522; results recorded here when it lands.)*
+### Result: halving the update recovers the regression at no measurable in-distribution cost
+
+Ten cells, `n = 48` each, clean tools, `python scripts/scale_report.py`:
+
+| s | in-dist resolved | in-dist root | unseen-fault resolved | unseen-fault root | invalid calls (in-dist / unseen) | held-out labels emitted |
+|---|---|---|---|---|---|---|
+| 0.00 (base) | 27.1% | 45.8% | 54.2% | 18.8% | 27.0% / 31.8% | 10/42, 5/46 |
+| 0.25 | 39.6% | 52.1% | 39.6% | 10.4% | 19.8% / 25.1% | 2/46, 5/46 |
+| **0.50** | **66.7%** | **77.1%** | **62.5%** | **27.1%** | 9.1% / 5.3% | **0/41, 13/24** |
+| 0.75 | 47.9% | 68.8% | 43.8% | 10.4% | 5.1% / 2.2% | 0/47, 5/43 |
+| 1.00 (trained) | 62.5% | 66.7% | 27.1% | 2.1% | 0.0% / 0.0% | 0/48, 1/46 |
+
+**s = 0.5 dominates the unattenuated policy.** Against s = 1.00 it gains **+35.4 pp
+unseen-fault resolution** (z = 3.73) and **+25.0 pp unseen-fault root cause** (z = 3.71),
+while in-distribution resolution differs by +4.2 pp — statistically indistinguishable
+(z = 0.43). Halving the LoRA update recovers most of the held-out-fault regression and
+costs nothing measurable on the distribution the policy was trained for.
+
+The mechanism moves with it, which is what makes this a fix rather than a coincidence. On
+held-out incidents the trained policy emits a correct held-out label **once in 46
+submissions**; at s = 0.5 it emits **13 in 24**, and those 13 are exactly its 13 correct
+root causes. The collapsed prior is recoverable by attenuation because the labels were
+never removed from the model — only pushed below every competitor by fine-tuning on a
+closed catalogue.
+
+**What the sweep does not establish.** The frontier is *not* monotone: s = 0.75 sits below
+both neighbours on both splits. Neither dip clears significance at this size (z = 1.87 and
+1.90 against s = 0.5), so **the sweep resolves the direction — attenuation trades
+in-distribution sharpness for held-out coverage — but not the optimum.** Claiming 0.5 as
+"the right scale" would be reading a curve that `n = 48` cannot draw; locating it needs
+more episodes per cell, and that is stated rather than glossed.
+
+**Two internal validity checks, both passed.** Invalid-call rate is cleanly monotone in s —
+27.0 → 19.8 → 9.1 → 5.1 → 0.0% in-distribution, 31.8 → 25.1 → 5.3 → 2.2 → 0.0% on held-out
+faults. That is the quantity the adapter most directly controls, and it scales smoothly
+exactly as an exact linear interpolation of the update predicts. Separately, the s = 1.00
+arm reproduces the published DPO-435 row (62.5% vs 64.1% in-distribution, 27.1% vs 31.2%
+unseen fault, both within noise) and the s = 0.00 arm reproduces base — so the scaling
+machinery and the serving path are the same ones that produced the tables above.
+
+**Contamination, reported rather than absorbed.** Three cells logged control-plane settle
+timeouts: one each in the two s = 0.00 cells and s = 0.25/in-distribution, and **five of 48
+in s = 0.25/unseen-fault** (~10%). Those episodes had their verdicts taken against a world
+that had not finished converging. The counter that reveals this was added hours before this
+sweep ran; every earlier table in this document was computed without it, and reads 0 only
+because the field did not exist.
 
 ## 6e. Episode-level GRPO
 
