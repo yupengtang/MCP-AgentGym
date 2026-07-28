@@ -43,6 +43,7 @@ class Cell:
     wall: float = 0.0
     completion_tokens: int = 0
     truncated: int = 0
+    settle_timeouts: int = 0
 
     def add(self, t: Trajectory) -> None:
         v = t.verification
@@ -57,6 +58,7 @@ class Cell:
         self.wall += t.wall_seconds
         self.completion_tokens += t.completion_tokens
         self.truncated += getattr(t, 'truncated_turns', 0)
+        self.settle_timeouts += getattr(t, 'settle_timeouts', 0)
 
     def metrics(self) -> dict[str, Any]:
         if not self.n:
@@ -75,6 +77,10 @@ class Cell:
             # Turns that hit the generation cap before emitting a call. A high
             # value means the budget, not the model, produced the failures.
             "truncated_turn_rate": round(self.truncated / max(1, self.tool_calls), 4),
+            # Episodes whose verdict was taken before the control plane finished
+            # converging. Must be 0 for a table to describe the agent rather than the
+            # machine it ran on.
+            "settle_timeouts": self.settle_timeouts,
         }
 
 

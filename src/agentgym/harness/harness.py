@@ -168,6 +168,7 @@ class AgentHarness:
         trajectory.prompt_tokens = getattr(self.policy, "prompt_tokens", 0)
         trajectory.completion_tokens = getattr(self.policy, "completion_tokens", 0)
         trajectory.truncated_turns = getattr(self.policy, "truncations", 0)
+        trajectory.settle_timeouts = getattr(self.episode, "settle_timeouts", 0)
 
         observability.record_episode(
             fault=trajectory.fault, split=trajectory.split,

@@ -117,6 +117,12 @@ class Trajectory:
     completion_tokens: int = 0
     # Turns that hit the generation cap before emitting a tool call.
     truncated_turns: int = 0
+    # Times the control plane failed to produce its intended pods inside the settle window.
+    # Non-zero means this episode's verdict was taken against a world that had not finished
+    # converging, so its reward partly measures machine load. Recorded rather than assumed
+    # to be zero: the timeout is silent, and an affected episode is otherwise
+    # indistinguishable from a genuine failure.
+    settle_timeouts: int = 0
     stop_reason: str = ""
     system_prompt_hash: str = ""
 

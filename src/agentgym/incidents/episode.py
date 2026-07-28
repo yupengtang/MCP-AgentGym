@@ -49,6 +49,10 @@ class Episode:
     telemetry: Telemetry = field(init=False)
     _services_cache: dict[str, ServiceHealth] | None = field(default=None, init=False)
     _actions: list[dict[str, Any]] = field(default_factory=list, init=False)
+    # Times the control plane failed to produce its intended pods within SETTLE_TIMEOUT_S.
+    # Non-zero means this episode's verdict was computed against a world that had not
+    # finished converging, so the reward describes the machine's load as much as the agent.
+    settle_timeouts: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
         self.mesh = Mesh(kube=self.kube, sim=self.sim)
@@ -119,11 +123,18 @@ class Episode:
             previous = current
         return max_ticks
 
-    def _settle(self) -> None:
+    def _settle(self) -> bool:
         """Wait until the real controllers have produced the pods they intend to.
 
         Polls on a condition rather than sleeping a fixed amount, so the wait is as short
         as the control plane allows and the outcome does not depend on machine speed.
+
+        Returns whether it actually settled. **The timeout is a fail-open**: when it
+        expires the world advances with pods the controller-manager has not created yet,
+        the incident then looks unresolved, and nothing anywhere reports that the cause was
+        a slow control plane rather than a bad fix. That is indistinguishable from a real
+        failure at the point where the reward is computed, so every expiry is counted and
+        the count travels with the episode.
         """
         deadline = time.time() + SETTLE_TIMEOUT_S
         while time.time() < deadline:
@@ -149,8 +160,10 @@ class Episode:
                 p.spec.node_name or _unschedulable(p) for p in live
             )
             if observed and len(live) >= want and decided:
-                return
+                return True
             time.sleep(0.15)
+        self.settle_timeouts += 1
+        return False
 
     # --- observation --------------------------------------------------------
 
