@@ -438,10 +438,61 @@ One bug was caught before it ever ran: the policy forward was written inside
 without it. It raises nothing and still produces a model — so
 `test_policy_forward_runs_with_adapter_enabled` now pins it.
 
-12 tests cover the advantage algebra (group-scoped, zero-mean, unit-scale, ordering
+15 tests cover the advantage algebra (group-scoped, zero-mean, unit-scale, ordering
 preserved), the loss direction under positive and negative advantage, length invariance,
-KL non-negativity, and mask correctness. `slurm/train_episode_grpo.sbatch` runs the full
-sample-then-train loop.
+KL non-negativity and finiteness, group adjacency, and mask correctness.
+`slurm/train_episode_grpo.sbatch` runs the full sample-then-train loop; passing
+`SAMPLES_FILE` reuses existing rollouts, since the DPO sampler already drew four attempts
+per incident from this same policy at temperature.
+
+### Three defects between "tests pass" and "it trains"
+
+All 15 tests passed before the first run, and the first three attempts still failed. Each
+failure is a different way for a unit test to be true and useless.
+
+**1. The tests had a 8-token vocabulary.** The loss computed
+`log_softmax(logits.float())`, materialising a `[B, T, V]` float32 tensor. At Qwen3's
+151,669-token vocabulary and a 12k context that is ~7.5 GB for the forward and as much
+again retained for the backward — an OOM on a 44 GB L40S at batch size 1. The tests
+exercise the same code path with `V = 8`, where the tensor is 200 bytes. Switching to
+`cross_entropy(reduction="none")`, which is fused and recomputes softmax in the backward
+rather than storing it, fixed it; **all 15 tests passed unchanged, which is the evidence
+the rewrite is equivalent** and also the evidence they could never have caught it.
+
+**2. The KL reference was the wrong policy — and the docstring said so.** The reference
+was `model.disable_adapter()`, which yields the *base* model, while the policy starts from
+the SFT adapter. So KL(SFT ‖ base) was already enormous before any update:
+
+```
+step 5    pg = -0.8598    kl = 32472.04    loss = 1298.02
+```
+
+At β = 0.04 the penalty exceeded the policy gradient by three orders of magnitude: the run
+was optimising *return to base*, not *improve the policy*. Nothing errored — the loss fell
+steadily. The module docstring claimed the KL was "measured against the policy being
+improved", which is precisely what disabling the adapter does not do; the prose and the
+code disagreed and only the prose was right. The SFT adapter is now loaded twice —
+`default` trains, `reference` is frozen — and `grpo_loss` takes a `ref_context` that
+switches between them. After the fix, `step 5: pg = -0.8594, kl = 0.0108`. The new test
+asserts the *relationship* the bug violated: `loss == pg_loss` at step 0.
+
+The old KL test passed throughout, because it handed the stub identical logits for policy
+and reference. It tested the estimator's algebra, not whether the right policy was passed
+to it.
+
+**3. Truncation was silent.** `_collate` truncated at `max_length` without a word. A cut
+episode keeps its full group-relative advantage but loses its later turns — frequently the
+one that resolved the incident — so the gradient attributes +A to a prefix that did not
+earn it. Truncated and zero-assistant-token examples are now counted into
+`train_log.json`, with a warning above 25%. `max_length` was then chosen by measurement
+rather than habit: over 250 sampled episodes the median is 6,282 tokens, p95 8,225, max
+13,064, so 12,288 truncates 1.2% where 8,192 would truncate 5.6%.
+
+A fourth was caught by inspection rather than failure: the training loop does not shuffle,
+which is load-bearing. Advantages are zero-mean *within* a group, so group members staying
+adjacent is what lets each accumulation window span whole groups and cancel the baseline
+inside it — the variance reduction GRPO exists to buy. The ordering was correct but
+accidental; `test_group_members_stay_adjacent` now pins it.
 
 ## 7. Open items
 
@@ -466,7 +517,7 @@ Stated as open rather than quietly omitted.
 
 ## Engineering notes worth keeping
 
-Five problems that cost real time and had non-obvious answers.
+Six problems that cost real time and had non-obvious answers.
 
 **The serial-rollout bug, written twice.** The adapter-scale sweep was submitted with an
 unsharded rollout loop and measured 3 episodes in 18 minutes — about 64 hours for the full
@@ -491,6 +542,28 @@ rollout with two live ReplicaSets. The fix was to settle on the same rule the re
 (`settle_world()`: not converged while anything is transient) instead of a tick count.
 Same class as the rest of this document — the assertion was true, it was just answering
 "is the machine fast enough" rather than "does the fix work".
+
+**…and the fix was right but insufficient.** Two clean full-suite runs later it flaked
+again, on `MissingSecret`. The actual root cause was one level down: `Episode._settle()`
+polls until the real controllers have produced their intended pods, with a 20-second
+deadline — and on expiry the `while` loop simply exited and the function returned. Every
+tick's settle could therefore give up silently underneath the new convergence rule, letting
+the world advance with pods the controller-manager had not created. The incident then reads
+unresolved, and **at the point where the reward is computed that is indistinguishable from
+a genuine failure.**
+
+This is the most consequential instance of the pattern in the repository, because it is not
+confined to a test: every rollout calls `step()`, every `step()` calls `_settle()`, and any
+episode affected would contribute a wrong reward to training data or an evaluation table
+with nothing anywhere recording it. `_settle` now returns whether it settled and counts
+expiries; the count travels into the `Trajectory` and into the evaluation report, where a
+non-zero value means that table describes the machine as much as the agent. The environment
+test skips with an explicit message when it hits one, rather than asserting a fix failure
+it cannot substantiate.
+
+Trajectories recorded before this field existed read 0. That is the absence of a record,
+not evidence that no timeouts occurred, and it is stated that way in the code and in the
+commit rather than quietly enjoyed.
 
 **No container runtime.** PACE ICE has no root, no Docker, and no `/etc/subuid` range, so
 rootless Podman cannot map multiple UIDs and neither `kind` nor `k3s` will start. Running
