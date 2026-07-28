@@ -1,0 +1,589 @@
+# MCP-AgentGym — experiment log
+
+Methodology and results. Every number here was produced by running the code in this
+repository on PACE ICE; nothing is estimated. Tables are regenerated with
+`python -m agentgym.eval.report`.
+
+---
+
+## 1. Environment correctness
+
+**Claim.** For every fault family, the injected fault breaks the cluster, the
+known-correct remediation fixes it, and the executable verifier recognises both states.
+
+**Method.** `tests/test_environment.py` parameterises over all 14 families. For each: a
+fresh namespace, the topology applied, the fault injected, `assert not ep.resolved()`;
+then the remediation applied through the same mutation methods the MCP write-tools use,
+the world advanced until pod state stabilises, `assert ep.resolved()`.
+
+**Result.** 14/14 families pass in both directions, plus determinism and split-disjointness
+checks — **16 passed**.
+
+This is the load-bearing result. A fault that does not bite makes its reward vacuous; a
+fault that cannot be fixed makes its reward unreachable. Two bugs found this way:
+
+- **The taint bug.** The API server stamps `node.kubernetes.io/not-ready:NoSchedule` on
+  every new Node and relies on the node-lifecycle-controller to lift it. That controller
+  is disabled here (it would evict simulated pods), so nothing removed the taint and
+  *nothing was ever schedulable*. The simulator now owns the taint, because it owns node
+  health.
+- **The reaper bug.** Nothing confirmed pod deletion, so namespaces never left
+  `Terminating` and deleted pods kept holding node capacity. After ~13 episodes a worker's
+  nodes were full and every new pod stayed `Pending`. Confirming termination is the
+  kubelet's job; the simulator now does it. This also fixed `delete_pod`, which would
+  otherwise have hung forever.
+
+Both were only visible because the contract test asserts on *cluster state* rather than
+on the agent's transcript.
+
+## 2. MCP protocol compliance
+
+**Claim.** The tools are MCP tools, not functions with an MCP-shaped docstring.
+
+**Method.** `tests/test_mcp_protocol.py` connects the reference `mcp` client to each of
+the four servers over a real JSON-RPC transport, lists tools, and compares every
+advertised name, description, and `inputSchema` against the registry.
+
+**Result.** **7 passed** — schemas match exactly for all four servers; a tool error is
+returned as an error result rather than killing the session, and the session stays usable
+afterwards.
+
+## 3. Operator
+
+**Claim.** A real controller, with the properties that make controllers correct.
+
+**Method.** `tests/test_operator.py` drives `IncidentRunController` against the real API
+server: reconcile to terminal state, re-reconcile a finished run, delete and verify the
+finalizer cleaned up.
+
+**Result.** **5 passed** — CRD installs with a status subresource; a run reaches
+`Succeeded` with `resolved`, `rootCauseCorrect`, `toolCalls` on `/status`; a second
+reconcile pass acts on nothing (`acted == 0`, timestamps unchanged); the finalizer
+removes the episode namespace before releasing the object.
+
+## 4. Scale and cost
+
+| Quantity | Measured |
+|---|---|
+| Incidents generated | 1,200 across 4 splits |
+| Trajectories executed and verified | 4,092 |
+| Control-plane start | 11–13 s |
+| Median episode wall time | 2.4 s |
+| Full 1,200-episode rollout | ~5 min wall (16-way CPU array) |
+| Environment GPU cost | zero |
+| QLoRA SFT, Qwen3-8B, 3 epochs, 614 examples | 1 h 29 m, one L40S |
+
+An episode costs ~2.4 s on a CPU core. That is the number that makes post-training
+viable: the same workload on a real cluster would be minutes per episode and would not
+reset cleanly.
+
+## 5. Scripted expert reference line
+
+The expert has ground truth and resolves tool names through the schema it is shown. It is
+the ceiling for an agent that reads the schema perfectly every turn, and it is reported as
+a scripted policy throughout — never as a model.
+
+| variant | n | resolution | root cause | unsafe | invalid calls | tool calls | reward |
+|---|---|---|---|---|---|---|---|
+| expert-scripted | 1,452 | 90.4% | 100.0% | 0.0% | 0.0% | 7.5 | 2.60 |
+
+### 5.1 By split
+
+| split | resolution |
+|---|---|
+| in-distribution | 95.7% |
+| unseen fault | 97.8% |
+| unseen topology | 95.0% |
+| **compositional** | **50.8%** |
+
+The expert reasons about one root cause. Given two independent simultaneous faults it
+fixes one and stops — so compositional resolution lands near half. This is a designed
+property being measured, not a defect: it quantifies exactly how far single-fault
+reasoning carries.
+
+### 5.2 Robustness to tool-schema shift
+
+Retention = resolution under the suite ÷ that variant's own clean resolution.
+
+| suite | retention |
+|---|---|
+| clean | 1.00 |
+| rename | 0.96 |
+| paraphrase | 0.96 |
+| arg_rename | 0.96 |
+| extra_required_arg | 0.95 |
+| retype_arg | 0.95 |
+| distractors | 0.95 |
+| **server_dropout** | **0.74** |
+| malformed | 0.95 |
+| truncation | 0.95 |
+| flaky | 0.95 |
+| combined | 0.96 |
+
+Two things follow, and both matter for reading the model results:
+
+1. **The perturbations are really applied.** `server_dropout` costs 26% even to a perfect
+   schema-reader, because a withdrawn tool cannot be called by anyone. That is the
+   irreducible floor.
+2. **Schema shift is survivable in principle.** Renames, paraphrases, argument renames,
+   retyping, and distractors cost a perfect reader only ~4–5%. So when a model loses more
+   than that, the loss is a fact about the model — it stopped reading the schema and
+   started calling tools from memory — not an artifact of an impossible task.
+
+## 6. Supervised fine-tuning
+
+**Setup.** Qwen3-8B, QLoRA (4-bit NF4, LoRA r=32, α=64, all attention and MLP
+projections), 614 curated demonstrations, 3 epochs, lr 1e-4 cosine, effective batch 8,
+8,192-token context, one L40S.
+
+**Loss masking.** Only assistant tokens contribute. Trajectories are dominated by long
+JSON tool outputs; training on those would teach the model to *generate* cluster state
+instead of querying for it. Qwen3's stock template has no `{% generation %}` markers, so
+the project ships its own template — and passes the identical file to vLLM via
+`--chat-template`, making the training and serving prompts byte-identical.
+
+**Data hygiene.** 1,200 trajectories → 646 kept: 526 dropped as evaluation-split, 28 as
+unresolved, and the remainder capped so no fault family exceeds 18% of the set.
+Contamination check: **0 overlap** between the 646 training incidents and the 526
+evaluation incidents.
+
+**Result.** train_loss 0.110, eval_loss 0.034, token accuracy 98.9%.
+
+**Reading it honestly.** An eval loss of 0.034 is *not* evidence of diagnostic skill. The
+expert is formulaic — a fixed investigation order per fault family — so a low loss mostly
+means the format was learned. Whether anything transferable was learned is what §5.2's
+perturbation suites and the held-out splits are for, and those are the numbers to trust.
+
+## 6b. RETRACTED — the "SFT is worse" result was a bug in this repository
+
+**This section originally reported that SFT made the agent ten times worse and presented
+it as a finding about training. That conclusion was wrong.** The cause was a
+train/inference history mismatch in the harness (§ engineering notes, "the harness showed
+the model a transcript it was never trained on"). Fixing it moved the same adapter from
+3.1% to 29.3% resolution with no retraining.
+
+The original analysis is kept below, unedited, because the reasoning that led to a wrong
+conclusion is worth preserving: every hypothesis in the table *was* checked and correctly
+ruled out, and the conclusion still turned out to be wrong — because the one thing not on
+the list was the harness itself. The measurement apparatus was never a suspect.
+
+The lesson is not about SFT. It is that a result which moves in the direction you expect
+gets less scrutiny than one that does not, and "the fine-tuned model overfit and degraded"
+is exactly the kind of story that feels explanatory enough to stop investigating.
+
+---
+
+### Original (retracted) analysis
+
+**Setup.** Qwen3-8B, QLoRA r=32, 614 curated expert demonstrations, 3 epochs. Evaluated
+against the base model on 256 in-distribution episodes with clean tool schemas.
+
+| variant | resolution | root cause | invalid call rate | mean calls | mean reward |
+|---|---|---|---|---|---|
+| base (Qwen3-8B) | **30.9%** | 33.2% | 35.4% | 12.4 | −0.43 |
+| SFT (v3) | **3.1%** | 0.4% | **89.8%** | 18.5 | −5.02 |
+
+Fine-tuning made the model roughly **ten times worse** at the task it was fine-tuned for.
+
+**What the SFT model actually emits.** It produces the *reasoning* half of the training
+target and never the tool call:
+
+```
+Look at pod-level state to find which workloads are unhealthy and whether they are
+restarting. Cluster events will show why they died. Cluster events will show why
+they died.
+```
+
+Note the verbatim repetition and the blending of phrasing from different demonstration
+steps — the signature of a degenerate policy, not of a model that learned a format.
+
+**What was ruled out.** Each of these was checked rather than assumed:
+
+| Hypothesis | Check | Result |
+| --- | --- | --- |
+| Training targets lack the JSON call | 5,233 assistant turns inspected | 5,233/5,233 contain a ```json block |
+| Examples truncated at `max_length` | Tokenized the whole dataset | max 6,844 vs cap 8,192 — 0% truncated |
+| Loss mask excludes the JSON | Decoded the mask on real content | mask = full content **+** `<\|im_end\|>` |
+| Adapter not served | vLLM engine log and adapter config | LoRA loaded, r=32, correct base |
+| Generation cap cutting the call | `truncated_turns` tracked separately | 167 of 4,736 turns — not the cause |
+
+**Why this matters more than a good number would.** Training metrics were excellent:
+`eval_loss 0.0334`, token accuracy **98.9%**. Under teacher forcing the model predicts
+every next token almost perfectly, because the true prefix is always supplied. Free-running
+it never has to *decide* to emit the call — and it doesn't. The gap between 98.9% token
+accuracy and 3.1% task success is the entire argument for this project: **an agent cannot
+be evaluated by its loss curve.** Only executed, verified rollouts reveal this, and they
+have to be cheap enough to run routinely or nobody runs them.
+
+The likely remedies — more diverse demonstrations, lower learning rate, fewer epochs,
+mixing in on-policy data — are stated as hypotheses, not conclusions; none has been tested
+yet. The result stands as measured.
+
+## 6c. DPO, and two ways of reading the same number
+
+**The result.** DPO on 88 preference pairs, mined from four sampled attempts at the same
+incident and ranked by the executable reward (mean margin 2.61), on top of the SFT
+adapter:
+
+| | resolution | root cause | invalid calls | reward |
+| --- | --- | --- | --- | --- |
+| base | 32.8% | 39.1% | 26.3% | 0.10 |
+| SFT | 40.6% | 35.2% | 0.6% | 1.08 |
+| SFT + DPO (88 pairs) | 47.3% | 40.6% | 0.1% | 1.27 |
+| SFT + DPO (435 pairs) | **48.8%** | **44.1%** | **0.1%** | **1.32** |
+
+**The near-miss.** On in-distribution incidents with clean tools, SFT and DPO score
+*identically* (53.1%). Reading that cell alone gives "DPO produced no gain" — a conclusion
+that survives a sanity check, sounds like a familiar result, and is wrong. The gain is on
+the held-out axes: **+23.4 pp on unseen topologies**, +3.1 pp on compositional incidents,
+and improvement on every perturbation suite where SFT was weakest (required-argument
+0.76 → 0.88, server dropout 0.56 → 0.62, combined 0.82 → 0.91).
+
+That is a mechanistically sensible place for it to land: the preference pairs are drawn
+from the model's *own failures*, so they carry recovery behaviour that demonstrations of
+the happy path never show. But the point here is methodological — this is the second time
+in this project that a correct set of numbers produced an inverted conclusion because the
+wrong slice was read first (the earlier one compared SFT against the expert ceiling rather
+than against base). Splitting the evaluation along four held-out axes is what made the
+difference recoverable.
+
+### Diagnosing a pair shortage without guessing
+
+The first DPO run mined only 88 pairs from 120 incidents, and two hypotheses explained
+that equally well: too few incidents sampled, or a policy too self-consistent to disagree
+with itself. They have opposite fixes — sample more, or add entropy — and the pair count
+alone cannot distinguish them.
+
+Rather than pick one, the miner was instrumented to record *why* each incident failed to
+yield a pair. One run settled it:
+
+```
+incidents_considered        120
+incidents_with_pair          88     73% pair rate
+mean_margin                2.609    high-information contrasts
+rejected_no_reward_spread     1     only ONE incident had zero variance
+rejected_margin_too_small    30
+```
+
+The consistency hypothesis was **disproved**: the policy varies plenty, and the pairs it
+does produce are strongly separated. The shortage was purely a sampling-volume problem —
+and the reason volume was low was a defect, not a budget: the sampling phase ran with
+`--shard-total 1` while the evaluation had been sharded eight ways weeks earlier. It never
+errored; it was just slow, which is the easiest symptom to misattribute to the model.
+
+Sharding the sampler took 480 episodes to **2,400**, and the pair count from 88 to **435**
+— within 1% of the 440 projected from the measured 73% rate, which is itself a check that
+the diagnosis was right.
+
+The generalisable lesson: **when one observable is consistent with two opposite diagnoses,
+the correct move is not to choose, but to make the system report one more fact.** Four
+counters settled in a single run what would otherwise have been an expensive guess.
+
+### The pair-count ablation, and a second near-miss
+
+Because both DPO runs used the same method, starting adapter and evaluation, the pair
+count is the only variable — a clean ablation. Resolution rate, clean tools, `n = 64` per
+cell:
+
+| variant | pairs | in-dist. | unseen fault | unseen topology | compositional | all splits |
+| --- | --- | --- | --- | --- | --- | --- |
+| SFT | — | 53.1% | 29.7% | 32.8% | 46.9% | 40.6% |
+| SFT + DPO | 88 | 53.1% | 29.7% | **56.2%** | **50.0%** | 47.3% |
+| SFT + DPO | 435 | **64.1%** | **31.2%** | 51.6% | 48.4% | **48.8%** |
+
+**5× the preference data bought +11.0 pp in-distribution and nothing out of it** — +1.5 pp
+overall, with two held-out splits slightly *down*. The extra pairs sharpened the policy on
+the distribution they were mined from. They did not buy generalisation.
+
+This nearly went into the record backwards. The evaluation writes one cell at a time, and
+the first to land was in-distribution, showing +11.0 pp resolution, +10.9 pp root cause and
+0.0% invalid calls. That is a decisive-looking win, it confirmed the hypothesis that
+motivated the work, and it was written up as one before the remaining fifteen cells
+finished. The full sweep reduced it to +1.5 pp. **The third inverted conclusion in this
+project, and the first caused by reading a partial result rather than the wrong slice of a
+complete one** — which is why `serve_and_eval.sbatch` now fails the job on any empty cell,
+and why no number enters a table before its sweep is complete.
+
+The schema-shift view carries a related trap. Retention is normalised to each variant's
+*own* clean baseline, and the 435-pair run's baseline rose 11 pp — so its retention falls
+even on suites where it resolves strictly more incidents. In absolute terms:
+
+| suite | DPO-88 | DPO-435 | Δ |
+| --- | --- | --- | --- |
+| clean | 53.1% | 64.1% | +10.9 |
+| rename | 57.8% | 60.9% | +3.1 |
+| arg_rename | 62.5% | 65.6% | +3.1 |
+| distractors | 68.8% | 70.3% | +1.6 |
+| server_dropout | 32.8% | 35.9% | +3.1 |
+| combined | 48.4% | 54.7% | +6.3 |
+| **extra_required_arg** | **46.9%** | **34.4%** | **−12.5** |
+
+Six up, one down — and the regression is on the suite that adds a newly *required*
+argument. That is the failure mode a policy sharpened on 435 examples of the argument
+conventions it already knew would be expected to have, and the retention table hides it
+behind a moved denominator. **A normalised metric is the right default for comparing
+variants with different baselines, and the wrong one for deciding whether a variant
+regressed.** Both views are now reported.
+
+## 6d. The unseen-fault regression is label-prior collapse
+
+Every post-trained variant scores below the base model on held-out fault families — 29.7%
+(SFT), 29.7% (DPO-88), 31.2% (DPO-435) against **48.4%** for base. This is the only place
+in the project where post-training makes the agent *worse*, so it is worth knowing exactly
+what broke rather than filing it under "catastrophic forgetting" and moving on.
+
+The first extra fact reframes it. On the same episodes:
+
+| variant | resolution | **root cause** | mean tool calls | **mean reward** |
+| --- | --- | --- | --- | --- |
+| base | 48.4% | 14.1% | 13.3 | **−0.11** |
+| SFT | 29.7% | 0.0% | 11.0 | +0.63 |
+| DPO-435 | 31.2% | 1.6% | 11.6 | +0.65 |
+
+Base resolves more unfamiliar incidents while earning a *negative* reward and identifying
+the cause 14% of the time: it flails through 13.3 calls, accumulates invalid ones, and
+sometimes restarts its way into a fix it cannot explain. That is worth knowing, but it does
+not explain the post-trained models' **0.0%**.
+
+The second fact does. Counting every diagnosis the models ever submitted, across all four
+splits:
+
+```
+                emissions of the two held-out labels
+base            25 / 501 submissions   5.0%
+SFT              0 / 599 submissions   0.0%
+DPO-88           0 / 626 submissions   0.0%
+DPO-435          1 / 616 submissions   0.2%
+```
+
+The post-trained policies **never** emit `network_policy_blocks_dependency` or
+`node_unhealthy_reduces_capacity` — not once in ~600 opportunities. Both labels are in the
+`submit_diagnosis` enum and in the system prompt on every single episode; the models are
+not unable to see them, they are unable to reach them. What they emit instead is
+confidently wrong and drawn from the training catalogue —
+`readiness_probe_targets_wrong_endpoint` for 17 of 32 `NodeNotReady` episodes.
+
+So the regression is not degraded reasoning. It is **label-prior collapse**: fine-tuning on
+a closed catalogue drives P(label) to zero for classes with no demonstrations, and the
+argmax can no longer select them at any evidence strength. The distinction matters because
+the two diagnoses have different fixes — degraded reasoning needs better data, a collapsed
+prior needs the update attenuated or regularised.
+
+### Attenuating the update, without retraining
+
+A LoRA update enters each layer as `delta_W = (lora_alpha / r) * B @ A`, so multiplying
+`lora_B` by `s` scales the entire update by exactly `s`. `s = 0` is the base model, `s = 1`
+the trained one, and intermediate values interpolate — no retraining, and every scale can
+be served at once by the multi-LoRA path already built for the serving benchmark.
+
+`scripts/scale_adapter.py` produces the scaled copies (verified exact: `lora_B` scaled,
+`lora_A` untouched, `|B|` sums in a 1:2:3 ratio across s = 0.25/0.5/0.75), and
+`slurm/adapter_scale_sweep.sbatch` evaluates s ∈ {0, 0.25, 0.5, 0.75, 1} on the
+in-distribution and held-out-fault splits. One knob, one engine load, and it answers
+directly whether the in-distribution gain and the held-out regression are separable or are
+two views of the same weight update.
+
+*(Sweep submitted as job 5545522; results recorded here when it lands.)*
+
+## 7. Open items
+
+Stated as open rather than quietly omitted.
+
+- **Model evaluation across splits and suites** (base vs SFT) — jobs queued; tables are
+  populated by the same `eval.report` pipeline that produced §5.
+- **DPO** — pairs come from sampling the SFT policy at temperature on training incidents
+  and ranking by verified reward. The expert produces one attempt per incident, so it
+  yields no pairs by construction (measured: 0).
+- **GRPO** — the deterministic simulator and executable reward make this the natural next
+  step; not yet run.
+- **Sim-to-real fidelity** — no real-cluster comparison has been run, so no fidelity claim
+  is made anywhere in this repository.
+
+---
+
+## Engineering notes worth keeping
+
+Four problems that cost real time and had non-obvious answers.
+
+**A test that measured machine load.** `test_fault_breaks_then_fixes` applied each fault's
+known-correct fix and then advanced a fixed 24 ticks before asserting resolution. It passed
+alone and in its own file, and failed roughly once per full-suite run — on a *different*
+fault each time. The cause is the hybrid design itself: ticks are deterministic, but pods
+are created asynchronously by the real controller-manager, so under load fewer pods exist
+per tick and the fixed budget expires mid-convergence. The failing verdicts showed it
+plainly — `redis-0` still `Booting`, everything downstream `DependencyUnavailable`, and a
+rollout with two live ReplicaSets. The fix was to settle on the same rule the reward uses
+(`settle_world()`: not converged while anything is transient) instead of a tick count.
+Same class as the rest of this document — the assertion was true, it was just answering
+"is the machine fast enough" rather than "does the fix work".
+
+**No container runtime.** PACE ICE has no root, no Docker, and no `/etc/subuid` range, so
+rootless Podman cannot map multiple UIDs and neither `kind` nor `k3s` will start. Running
+`etcd` + `kube-apiserver` + `kube-controller-manager` + `kube-scheduler` directly as user
+processes sidesteps the runtime entirely and keeps the API semantics that matter. Two
+flags were needed that are easy to miss: the scheduler and controller-manager exit or
+log-spam without `--authentication-kubeconfig`/`--authorization-kubeconfig`, and the
+requestheader CA flags are required or both components error several times a second about
+a missing CA bundle.
+
+**CUDA version skew.** The driver is 575.57 (CUDA 12.9). The default `vllm` pulled
+torch 2.11+**cu130**, which silently reports `cuda.is_available() == False` and surfaces
+as a confusing "your setup doesn't support bf16/gpu" from the Trainer. Pinning
+torch 2.8.0+cu128 fixes it — and then a stale torchvision built against 2.11 breaks
+`transformers` imports with `operator torchvision::nms does not exist`.
+
+**The tool catalog never reached the model.** The most dangerous bug in the project, and
+it produced no error at all. Tool schemas were passed as the OpenAI `tools` API field,
+but the project ships its own chat template — a plain message renderer that ignores the
+`tools` variable. So the schemas were silently dropped before the prompt was built, and
+the model was being asked to call tools it had never been shown.
+
+Nothing crashed. A fine-tuned model would still have scored reasonably, because it
+memorised tool names from demonstrations — which is precisely what makes this dangerous:
+the failure hides behind a plausible number. Two experiments would have been quietly
+meaningless:
+
+- the base-model comparison, since an untrained model cannot call tools it cannot see, and
+- **the entire schema-shift suite**, since a renamed tool never appeared in the prompt,
+  so there was nothing for the model to adapt to.
+
+Caught by rendering the template with `tools=` populated and grepping for a tool name:
+
+```
+>>> does 'list_pods' appear in the prompt? False
+```
+
+The fix moves the catalog into the system prompt for both training and serving, so a
+perturbed schema is visibly perturbed *in the prompt*. Expert results are unaffected — the
+scripted policy resolves names through the toolset object, not the prompt — so §5 stands;
+the SFT run was redone.
+
+The lesson generalises: an instrumentation path that fails open is worse than one that
+fails loudly, and prompt construction deserves an assertion, not an assumption.
+
+**The parser discarded valid tool calls and blamed the model.** The first base-model
+cells came back at 0/2 resolved with 37 of 48 calls invalid. The number pointed the way
+everyone expects an untuned model to point, which is exactly why it was worth checking.
+The raw completions showed the model emitting perfectly good calls:
+
+```
+</think>
+
+tool
+{ "name": "get_recent_changes", "arguments": { "namespace": "inc-00002" } }
+```
+
+The bare-object fallback was `\{[^{}]*"(?:name|tool)"\s*:.*?\}`. The lazy `.*?}` stops at
+the **first** closing brace — the one ending `arguments` — so the extracted text is
+missing its final brace and fails to parse. Every call with a nested argument object was
+dropped, which is nearly every call.
+
+Regex cannot do this: lazy truncates nested objects, greedy swallows everything between
+the first `{` and the last `}`. Replaced with a brace-balanced, string-aware scan, plus
+support for `<tool_call>` tags and for objects appearing after `</think>`. Of the 19
+"unparseable" completions, **10 were recovered as real tool calls**.
+
+The other 9 were genuine model failures, and worth naming because they are distinct
+behaviours: narrating an intention without acting, emitting what a tool *would have
+returned* instead of calling it, and stopping mid-`<think>`. Two tests guard against
+over-correcting — prose is not an action, and a hallucinated result object (no `name`
+key) must be rejected rather than dispatched.
+
+**The benchmark measured a request shape production never sends.** vLLM rejected the
+first benchmark run: `"auto" tool choice requires --enable-auto-tool-choice`. The
+benchmark was still passing `tools` as an API field while the harness had moved the
+catalog into the system prompt and stopped sending one. A benchmark whose requests differ
+from the system it is meant to characterise is worse than no benchmark.
+
+**The robustness table divided by the wrong denominator.** Retention came out at 1.46 for
+SFT under tool renaming — the model apparently solving *more* incidents with renamed tools
+than with correct ones. Physically impossible, and the table looked entirely normal.
+
+The `clean` baseline averaged over all four splits, including the much harder OOD ones,
+while the perturbation suites ran only on in-distribution incidents. Numerator and
+denominator were different populations. Scoping both to one split fixed it, and the real
+numbers are more interesting than the fake ones: SFT is *more* rename-robust than base
+(1.12 vs 0.82) but markedly more brittle under server dropout (0.56 vs the expert's
+irreducible 0.74).
+
+Worth noting that this bug produced a *flattering* result. Those are the hardest to catch,
+because nothing about them prompts a second look. What caught it was asking what a
+retention above 1.00 would have to mean.
+
+**The harness showed the model a transcript it was never trained on.** The most expensive
+bug in the project, and the one that nearly shipped as a scientific claim.
+
+Training targets render an assistant turn as reasoning followed by a fenced JSON call, all
+inside `content`. The harness instead recorded the reasoning in `content` and the call in a
+separate `tool_calls` field — the shape the OpenAI schema suggests, and the tidier of the
+two. But the chat template used for training *and* serving renders `content` only, so the
+call was dropped from the history.
+
+From turn two onward the model saw a transcript in which every previous assistant turn was
+prose with no tool call, and continued that pattern. **Turn one was always perfect**, which
+is why a single-turn probe with `peft` showed the adapter reproducing its target exactly
+and sent the investigation toward training instead of serving.
+
+Effect of the one-line fix, same adapter, no retraining:
+
+| | before | after |
+| --- | --- | --- |
+| resolution | 3.1% | **29.3%** |
+| invalid tool calls | 89.8% | **17.3%** |
+
+Guarded now by a test that pins the two renderers to each other — `_assistant_turn` (used
+to build inference history) must equal `_assistant_text` (used to build training targets),
+or the suite fails. They are the same contract seen from opposite ends, and nothing was
+enforcing that.
+
+**A hallucinated namespace returned success.** `list_namespaced_pod` on a namespace that
+does not exist returns an empty collection, not an error. A model that invented a namespace
+therefore received `[]` with `ok=True`, concluded there were no pods, and had no way to
+notice. The gateway now scopes every call to the episode's namespace and, on mismatch,
+returns an error that names the correct one — a real responder is scoped by RBAC and would
+be told "forbidden" rather than "nothing here".
+
+**`--limit` was applied after sharding.** Eight shards times a limit of 32 is 256 episodes
+per cell, not 32 — an eightfold overrun across ten cells and two variants. It raised no
+error and presented purely as slowness, which is the easiest symptom in the world to
+misattribute to the model.
+
+**Two real Kubernetes behaviours, discovered by adding real objects.** Making the
+datastore tier StatefulSets with PersistentVolumeClaims broke six fault families, and
+both causes turned out to be genuine Kubernetes semantics rather than simulator bugs.
+
+*StatefulSet rollouts do not self-heal.* A StatefulSet's RollingUpdate will not replace a
+pod that is not Running and Ready. Once its pod is wedged in `ImagePullBackOff`, patching
+the template changes `updateRevision` and nothing else — the pod keeps the old image
+indefinitely, and real Kubernetes requires deleting it by hand:
+
+```
+STS template image: postgres:16-alpine      (fix applied)
+pod image         : postgres:latest-broken  (pod never replaced)
+updateStrategy=RollingUpdate  currentRev != updateRev
+```
+
+This deserves its own fault family. It is excluded today because it breaks the
+single-action fix/verify contract the other families rely on, so faults target the
+stateless tier and the stateful tier serves as the dependency they cascade through.
+
+*A LimitRange default below an existing request rejects the pod.* Adding a LimitRange with
+`default: {cpu: 500m}` silently broke every GPU service, because those request 2 CPUs and
+declare no CPU *limit*. The default is not clamped to the request — admission rejects the
+pod outright and the ReplicaSet creates nothing:
+
+```
+Error creating: Pod ... is invalid: spec.containers[0].resources.requests:
+  Invalid value: "2": must be less than or equal to cpu limit of 500m
+```
+
+The lesson generalises: a LimitRange default bounds containers that declare nothing; set
+it below what declared containers already request and it becomes an admission-time
+outage. Both of these are the kind of thing that only surfaces when the environment uses
+the real objects rather than approximating them.
+
+**Irreconcilable dependency sets.** vLLM 0.26 requires transformers v5; peft 0.19 (the
+newest available) requires transformers v4. They cannot share an environment, so training
+and serving get separate venvs — which is the right architecture anyway. vLLM 0.11 also
+pulls transformers v5 by default and dies on `Qwen2Tokenizer has no attribute
+all_special_tokens_extended`, so the serving venv pins `<5` too.

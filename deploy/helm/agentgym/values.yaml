@@ -1,0 +1,92 @@
+# MCP-AgentGym Helm values.
+#
+# Deploys the serving half of the project: the inference engine, the MCP gateway, and
+# the IncidentRun operator. The gym itself runs as Slurm batch work and is not deployed
+# here -- it needs its own control plane per worker, which is a job, not a service.
+
+nameOverride: ""
+fullnameOverride: ""
+
+image:
+  repository: ghcr.io/agentgym/agentgym
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# --- inference engine ---------------------------------------------------------
+inference:
+  enabled: true
+  backend: vllm            # vllm | sglang
+  model: Qwen/Qwen3-8B
+  adapters:
+    # name: /path/to/adapter  -- served together via multi-LoRA
+    sft: /models/adapters/sft
+  maxModelLen: 16384
+  gpuMemoryUtilization: 0.88
+  replicas: 1
+  resources:
+    limits:
+      nvidia.com/gpu: 1
+      memory: 64Gi
+    requests:
+      cpu: "8"
+      memory: 48Gi
+  nodeSelector:
+    tier: gpu
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Equal
+      value: present
+      effect: NoSchedule
+
+# --- MCP gateway --------------------------------------------------------------
+gateway:
+  enabled: true
+  replicas: 2
+  port: 8080
+  # Permission tiers enforced server-side, not just in the prompt.
+  policy:
+    read: allow
+    mutate: allow
+    destructive: require_approval
+  budget:
+    maxToolCalls: 24
+    maxMutations: 8
+  resources:
+    requests: {cpu: "500m", memory: 512Mi}
+    limits: {cpu: "2", memory: 2Gi}
+
+# --- operator -----------------------------------------------------------------
+operator:
+  enabled: true
+  replicas: 1
+  watchNamespace: ""       # empty = all namespaces
+  resources:
+    requests: {cpu: "200m", memory: 256Mi}
+    limits: {cpu: "1", memory: 1Gi}
+
+# --- autoscaling --------------------------------------------------------------
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70
+
+# --- observability ------------------------------------------------------------
+observability:
+  serviceMonitor:
+    enabled: true
+    interval: 15s
+  otel:
+    enabled: true
+    endpoint: "http://otel-collector.observability:4317"
+
+# --- network policy -----------------------------------------------------------
+networkPolicy:
+  # Default-deny with explicit allows: the gateway may reach the engine and the API
+  # server, and nothing else may reach the engine at all.
+  enabled: true

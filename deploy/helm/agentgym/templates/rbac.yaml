@@ -1,0 +1,64 @@
+{{- if .Values.serviceAccount.create }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "agentgym.serviceAccountName" . }}
+  labels: {{- include "agentgym.labels" . | nindent 4 }}
+  {{- with .Values.serviceAccount.annotations }}
+  annotations: {{- toYaml . | nindent 4 }}
+  {{- end }}
+---
+{{- end }}
+# The operator's permissions. Deliberately narrow: it reconciles IncidentRuns and the
+# namespaces they own, and it may read workload state to verify an incident. It has no
+# access to Secret values anywhere in the cluster -- get_secret_meta returns key names
+# only, and that guarantee is enforced here rather than in the prompt.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "agentgym.fullname" . }}-operator
+  labels: {{- include "agentgym.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["agentgym.io"]
+    resources: ["incidentruns"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["agentgym.io"]
+    resources: ["incidentruns/status", "incidentruns/finalizers"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create", "delete", "patch"]
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps", "events", "resourcequotas", "nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/status", "configmaps", "services"]
+    verbs: ["update", "patch"]
+  # Metadata only. Never "get" on secrets: listing yields names and key names without
+  # values, which is exactly what get_secret_meta is allowed to expose.
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "replicasets", "deployments/scale"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["networkpolicies"]
+    verbs: ["get", "list", "watch", "delete", "patch"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources: ["customresourcedefinitions"]
+    verbs: ["get", "list", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "agentgym.fullname" . }}-operator
+  labels: {{- include "agentgym.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "agentgym.fullname" . }}-operator
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "agentgym.serviceAccountName" . }}
+    namespace: {{ .Release.Namespace }}

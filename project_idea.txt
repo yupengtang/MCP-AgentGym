@@ -1,0 +1,13 @@
+This file has been superseded.
+
+The original brainstorm is preserved verbatim at docs/original-brainstorm.txt.
+
+The project is now specified by three documents:
+
+  DESIGN.md               design of record: architecture, components, data model,
+                          verification, evaluation methodology, limitations
+  README.md               entry point: what it is, quickstart, measured results
+  reports/EXPERIMENTS.md  experiment log: methodology, results, engineering notes
+
+PROJECT.md records the four design decisions taken against the original brainstorm
+and the reasoning behind each.

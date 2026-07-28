@@ -1,0 +1,87 @@
+# EKS overlay:  helm install agentgym ./deploy/helm/agentgym -f values-eks.yaml
+#
+# Everything here is EKS-specific configuration of the same chart; no template changes.
+# STATUS: reviewed and rendered with `helm template`, but NOT deployed to a live EKS
+# cluster. Treat it as a starting point, not a validated production配置. DESIGN.md §9
+# records this limitation rather than implying coverage the project does not have.
+
+image:
+  # ECR. Replace the account id and region; the chart does not assume a registry.
+  repository: 123456789012.dkr.ecr.us-east-1.amazonaws.com/agentgym
+  tag: "0.1.0"
+
+serviceAccount:
+  create: true
+  annotations:
+    # IRSA: the pod assumes this role directly, so no AWS keys are mounted, stored in a
+    # Secret, or baked into the image. The role should grant only s3:GetObject/PutObject/
+    # ListBucket on the artifact bucket prefix.
+    eks.amazonaws.com/role-arn: arn:aws:iam::123456789012:role/agentgym-artifacts
+
+inference:
+  enabled: true
+  model: Qwen/Qwen3-8B
+  # Agent prompts carry a ~7.9k-token tool catalog plus a growing transcript; 16k is not
+  # enough for a 20-turn episode (measured: 21,943 tokens). See README serving results.
+  maxModelLen: 32768
+  gpuMemoryUtilization: 0.88
+  resources:
+    limits:
+      nvidia.com/gpu: 1
+      memory: 64Gi
+    requests:
+      cpu: "8"
+      memory: 48Gi
+  nodeSelector:
+    # g6e.xlarge is one L40S with 48GB — the instance this project's serving numbers were
+    # measured on, so the published latencies transfer.
+    node.kubernetes.io/instance-type: g6e.xlarge
+  tolerations:
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+
+gateway:
+  enabled: true
+  replicas: 2
+  policy:
+    read: allow
+    mutate: allow
+    destructive: require_approval
+
+operator:
+  enabled: true
+  replicas: 1
+
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70
+
+observability:
+  serviceMonitor:
+    enabled: true
+  otel:
+    enabled: true
+    endpoint: "http://otel-collector.observability:4317"
+
+networkPolicy:
+  enabled: true
+
+# --- AWS-specific extras -----------------------------------------------------
+aws:
+  region: us-east-1
+  artifacts:
+    # Consumed as AGENTGYM_ARTIFACT_URI by agentgym.storage.open_store, so trajectories,
+    # adapters and reports outlive any single cluster or scratch filesystem.
+    uri: s3://agentgym-artifacts/runs
+  storageClass:
+    # gp3 over the gp2 default: better baseline IOPS at lower cost, and the datastore
+    # StatefulSets in each incident namespace bind PVCs against it.
+    create: true
+    name: gp3
+    provisioner: ebs.csi.aws.com
+    parameters:
+      type: gp3
+      encrypted: "true"

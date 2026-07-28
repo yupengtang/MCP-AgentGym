@@ -1,0 +1,36 @@
+name: ci
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv venv --python 3.12
+      - name: Install
+        run: |
+          uv pip install -e '.[dev]'
+      - name: Lint
+        run: uv run ruff check src tests
+
+      # The environment tests need a real Kubernetes control plane. The binaries are
+      # ~330MB, so they are cached rather than refetched on every run.
+      - name: Cache control-plane binaries
+        uses: actions/cache@v4
+        with:
+          path: .agentgym-bin
+          key: k8s-v1.31.4-etcd-v3.5.16
+      - name: Fetch control-plane binaries
+        env:
+          AGENTGYM_BIN: ${{ github.workspace }}/.agentgym-bin
+        run: bash scripts/fetch_k8s_binaries.sh
+
+      - name: Environment contract + MCP protocol + operator
+        env:
+          AGENTGYM_BIN: ${{ github.workspace }}/.agentgym-bin
+          AGENTGYM_HOME: ${{ github.workspace }}/.agentgym-home
+          AGENTGYM_RUNTIME: ${{ runner.temp }}/agentgym-runtime
+        run: |
+          uv run pytest tests/ -q --no-header

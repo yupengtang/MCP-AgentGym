@@ -1,0 +1,33 @@
+{#-
+  AgentGym training/serving chat template.
+
+  Two differences from the stock Qwen3 template, both deliberate:
+
+  1. Assistant content is wrapped in {% generation %} markers so TRL's
+     assistant_only_loss can mask the loss to the tokens the model is responsible for.
+     Training on tool output would teach the model to hallucinate cluster state.
+
+     The <|im_end|> stop token is INSIDE the generation block, and that placement is
+     load-bearing. With it outside, the loss mask covers the content but not the token
+     that ends the turn, so the model is never trained to stop -- it then generates
+     until it hits the sampling cap. That failure is invisible in training metrics
+     (teacher forcing always supplies the next token) and only appears at generation
+     time as rambling, truncated turns that emit no tool call.
+  2. No <think> block is injected. The same template is passed to vLLM at serving time
+     (--chat-template), so the prompt the model is trained on and the prompt it is
+     served are byte-identical.
+-#}
+{%- for message in messages -%}
+{%- if message['role'] == 'assistant' -%}
+{{- '<|im_start|>assistant\n' -}}
+{%- generation -%}
+{{- message['content'] + '<|im_end|>' -}}
+{%- endgeneration -%}
+{{- '\n' -}}
+{%- else -%}
+{{- '<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>\n' -}}
+{%- endif -%}
+{%- endfor -%}
+{%- if add_generation_prompt -%}
+{{- '<|im_start|>assistant\n' -}}
+{%- endif -%}

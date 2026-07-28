@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Runtime + artifacts live on shared storage (see env.sh); never commit them.
+slurm/logs/
+*.out
+runs/
+artifacts/
+mlruns/
+.agentgym-bin/
+.agentgym-home/
+vllm-*.log
+
+# Slurm writes job logs into the repo root as <jobname>-<jobid>.out
+*-[0-9]*.out
+vllm-*.log

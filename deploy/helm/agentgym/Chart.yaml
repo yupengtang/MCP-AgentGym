@@ -1,0 +1,7 @@
+apiVersion: v2
+name: agentgym
+description: Serving stack for MCP-AgentGym - inference engine, MCP gateway, IncidentRun operator
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords: [agents, mcp, kubernetes, llm, sre]

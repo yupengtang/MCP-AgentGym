@@ -1,0 +1,56 @@
+{{- if .Values.operator.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agentgym.fullname" . }}-operator
+  labels:
+    {{- include "agentgym.labels" . | nindent 4 }}
+    app.kubernetes.io/component: operator
+spec:
+  # A controller with leader election disabled must be a singleton, or two replicas
+  # reconcile the same IncidentRun and run the episode twice.
+  replicas: {{ .Values.operator.replicas }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "agentgym.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: operator
+  template:
+    metadata:
+      labels:
+        {{- include "agentgym.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: operator
+    spec:
+      serviceAccountName: {{ include "agentgym.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: operator
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python", "-m", "agentgym.operator.controller"]
+          args:
+            - --namespace
+            - {{ .Values.operator.watchNamespace | default .Release.Namespace | quote }}
+          env:
+            {{- if .Values.observability.otel.enabled }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ .Values.observability.otel.endpoint | quote }}
+            - name: OTEL_SERVICE_NAME
+              value: agentgym-operator
+            {{- end }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: ["ALL"]}
+          resources: {{- toYaml .Values.operator.resources | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+{{- end }}
