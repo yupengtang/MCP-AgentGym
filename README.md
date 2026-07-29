@@ -511,10 +511,14 @@ Stated because a limitation you can name is worth more than one a reader finds.
   DPO emit the two never-demonstrated diagnosis labels **0 times in ~600 submissions**
   against 5.0% for base, despite both labels being in the tool enum on every episode. That
   is label-prior collapse from closed-catalogue fine-tuning. Scaling the LoRA update by
-  `s = 0.5` (`scripts/scale_adapter.py`, no retraining) recovers **+35.4 pp unseen-fault
-  resolution** and **+25.0 pp root cause** with **no measurable in-distribution cost**
-  (+4.2 pp, z = 0.43) — see [the frontier sweep](reports/EXPERIMENTS.md). The sweep
-  resolves the *direction* but not the optimum: it is non-monotone at `n = 48`, and that is
-  reported rather than smoothed.
+  `s = 0.5` (`scripts/scale_adapter.py`, no retraining) fixes most of it, and the
+  relationship is a **monotone dose-response** confirmed at the split ceiling (`n = 120`):
+  unseen-fault resolution goes **36.7% → 50.8% → 72.5%** as s falls 1.0 → 0.75 → 0.5, with
+  both adjacent steps significant (z = 2.22, 3.55) and z = 5.97 end-to-end. At `s = 1.0`
+  the policy emits a correct held-out label **0 times in 114 submissions**; at `s = 0.5`,
+  24 of 56. In-distribution cost is unmeasurable (+1.6 pp, z = 0.27). What is *not*
+  established: an optimum. A predicted resolution of the in-distribution wobble at
+  `s = 0.75` failed — the effect halved on replication and remains non-significant. See
+  [the frontier sweeps](reports/EXPERIMENTS.md).
 - **Episode-level GRPO is implemented and dry-run verified but not trained.** No number in
   this README comes from it.

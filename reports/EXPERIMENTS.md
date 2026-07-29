@@ -415,12 +415,46 @@ root causes. The collapsed prior is recoverable by attenuation because the label
 never removed from the model — only pushed below every competitor by fine-tuning on a
 closed catalogue.
 
-**What the sweep does not establish.** The frontier is *not* monotone: s = 0.75 sits below
-both neighbours on both splits. Neither dip clears significance at this size (z = 1.87 and
-1.90 against s = 0.5), so **the sweep resolves the direction — attenuation trades
-in-distribution sharpness for held-out coverage — but not the optimum.** Claiming 0.5 as
-"the right scale" would be reading a curve that `n = 48` cannot draw; locating it needs
-more episodes per cell, and that is stated rather than glossed.
+**What the n = 48 sweep did not establish.** The frontier is *not* monotone: s = 0.75 sits
+below both neighbours on both splits. Neither dip clears significance at this size
+(z = 1.87 and 1.90 against s = 0.5), so that sweep resolves the direction but not the
+optimum. Rather than gloss it, a second sweep was run at the largest `n` the splits allow.
+
+### Confirmation at n = 128: a dose-response, and one prediction that failed
+
+`s ∈ {0.5, 0.75, 1.0}`, `n = 128` in-distribution and `n = 120` on held-out faults (the
+split ceiling), `runs/eval-scale-n128`:
+
+| s | in-dist resolved | unseen-fault resolved | unseen-fault root | held-out labels emitted (unseen) |
+|---|---|---|---|---|
+| 0.50 | 67.2% | **72.5%** | **20.0%** | **24/56 (42.9%)** |
+| 0.75 | 57.0% | 50.8% | 6.7% | 8/112 (7.1%) |
+| 1.00 | 65.6% | 36.7% | 0.0% | **0/114 (0.0%)** |
+
+**On held-out faults the relationship is monotone and every step is significant**:
+72.5% → 50.8% → 36.7%, with z = 3.55 between the first pair, z = 2.22 between the second,
+and z = 5.97 end-to-end. Root-cause accuracy and held-out label emission move in lockstep
+and monotonically — and at s = 1.00 the trained policy emits a correct held-out label
+**zero times in 114 submissions**.
+
+A dose-response across three levels is the strongest evidence available here that the
+effect is caused by update magnitude rather than by anything incidental to one checkpoint.
+And the in-distribution cost of the best setting remains unmeasurable: s = 0.5 against
+s = 1.0 is +1.6 pp, z = 0.27.
+
+**The prediction that failed.** The confirmation was justified by a power calculation
+saying n = 128 would resolve the s = 0.75 in-distribution dip at z ≈ 3.1. It did not. The
+dip replicated in *direction* but roughly halved in size — 18.8 pp at n = 48, 10.2 pp at
+n = 128 — and now sits at z = 1.69, still short of significance. Textbook regression to the
+mean: the calculation assumed the n = 48 effect size was the true one, which is exactly the
+caveat recorded when the job was submitted, and it is the caveat that came true. **The
+in-distribution non-monotonicity remains unresolved, and the honest reading is that the
+first sweep overestimated it.**
+
+So the claim the project makes is the one the data supports: attenuation monotonically buys
+held-out-fault performance at no measurable in-distribution cost. It does not claim to have
+located an optimum, and the wobble at s = 0.75 in-distribution is reported as unexplained
+rather than smoothed away.
 
 **Two internal validity checks, both passed.** Invalid-call rate is cleanly monotone in s —
 27.0 → 19.8 → 9.1 → 5.1 → 0.0% in-distribution, 31.8 → 25.1 → 5.3 → 2.2 → 0.0% on held-out
