@@ -323,6 +323,62 @@ the demonstration corpus was a fixed script per fault family, which taught phras
 instead of behaviour. Diversifying the expert's investigation order and optional evidence
 — while leaving the diagnosis and fix untouched — was worth more than tripling the data.
 
+### Post-training's one regression, traced to its mechanism and reversed
+
+Every post-trained variant scores **below the base model** on held-out fault families —
+29–31% against 48.4%. It is the only place in this project where training makes the agent
+worse, so it was worth finding out what actually broke rather than filing it under
+catastrophic forgetting.
+
+Counting what the models submit, across every split, settles it:
+
+```
+                emissions of the two never-demonstrated diagnosis labels
+base            25 / 501 submissions   5.0%
+SFT              0 / 599 submissions   0.0%
+DPO-88           0 / 626 submissions   0.0%
+DPO-435          1 / 616 submissions   0.2%
+```
+
+The post-trained policies **never** emit them — and both labels are in the
+`submit_diagnosis` enum and the system prompt on every single episode. They are not unable
+to see them, they are unable to reach them. What they emit instead is confidently wrong and
+drawn from the training catalogue: `readiness_probe_targets_wrong_endpoint` for 17 of 32
+`NodeNotReady` incidents.
+
+That is **label-prior collapse**, not degraded reasoning — and the distinction decides the
+fix. Degraded reasoning needs better data; a collapsed prior needs the update attenuated.
+
+A LoRA update enters each layer as `ΔW = (α/r)·B@A`, so multiplying `lora_B` by `s` scales
+it exactly. `s=0` is the base model, `s=1` the trained one, and every intermediate value is
+servable from one engine via multi-LoRA — no retraining. The result is a clean
+dose-response (`n = 120`, the held-out split's ceiling):
+
+| s | unseen-fault resolved | root cause | held-out labels emitted |
+|---|---|---|---|
+| **0.50** | **72.5%** | **20.0%** | **24/56 (42.9%)** |
+| 0.75 | 50.8% | 6.7% | 8/112 (7.1%) |
+| 1.00 (trained) | 36.7% | 0.0% | **0/114 (0.0%)** |
+
+Monotone at every step, both adjacent comparisons significant (z = 3.55, z = 2.22), and
+**z = 5.97 end-to-end**. Root-cause accuracy and label emission move in lockstep with it.
+In-distribution performance is not measurably harmed: 67.2% at s=0.5 against 65.6% at
+s=1.0, z = 0.27.
+
+A dose-response across three levels is the strongest evidence available here that the cause
+is update *magnitude* rather than anything incidental to one checkpoint — and the prior is
+recoverable precisely because the labels were never removed from the model, only pushed
+below every competitor by fine-tuning on a closed catalogue.
+
+**What this does not establish, including a prediction that failed.** The sweep does not
+locate an optimum. A first pass at `n = 48` showed an in-distribution dip at s=0.75, and the
+confirmation run was justified by a power calculation predicting `n = 128` would resolve it
+at z ≈ 3.1. It did not: the dip replicated in direction but roughly halved (18.8 pp → 10.2
+pp) and remains non-significant at z = 1.69 — textbook regression to the mean, and exactly
+the caveat recorded when that job was submitted. Whether attenuation generalises beyond this
+one checkpoint is [under test](reports/EXPERIMENTS.md); until it lands, the mechanism is
+demonstrated on one adapter family.
+
 ### Serving: what prefix caching is worth to an agent workload
 
 Measured on one L40S, Qwen3-8B, with the real 36-tool system prompt. The synthetic
@@ -507,18 +563,9 @@ Stated because a limitation you can name is worth more than one a reader finds.
 - **Compositional incidents inherit the primary fault's safety policy**, so unsafe-action
   accounting is slightly conservative on that split.
 - **Post-training regresses on held-out fault families** (29–31% vs 48.4% for base) —
-  diagnosed, and mitigated at a known cost. The mechanism is measured, not guessed: SFT and
-  DPO emit the two never-demonstrated diagnosis labels **0 times in ~600 submissions**
-  against 5.0% for base, despite both labels being in the tool enum on every episode. That
-  is label-prior collapse from closed-catalogue fine-tuning. Scaling the LoRA update by
-  `s = 0.5` (`scripts/scale_adapter.py`, no retraining) fixes most of it, and the
-  relationship is a **monotone dose-response** confirmed at the split ceiling (`n = 120`):
-  unseen-fault resolution goes **36.7% → 50.8% → 72.5%** as s falls 1.0 → 0.75 → 0.5, with
-  both adjacent steps significant (z = 2.22, 3.55) and z = 5.97 end-to-end. At `s = 1.0`
-  the policy emits a correct held-out label **0 times in 114 submissions**; at `s = 0.5`,
-  24 of 56. In-distribution cost is unmeasurable (+1.6 pp, z = 0.27). What is *not*
-  established: an optimum. A predicted resolution of the in-distribution wobble at
-  `s = 0.75` failed — the effect halved on replication and remains non-significant. See
-  [the frontier sweeps](reports/EXPERIMENTS.md).
+  diagnosed to its mechanism and reversed at no measurable in-distribution cost; see
+  [Post-training's one regression](#post-trainings-one-regression-traced-to-its-mechanism-and-reversed)
+  above. Two caveats stand: no optimum is located, and the held-out axis is only 120
+  incidents across two fault families.
 - **Episode-level GRPO is implemented and dry-run verified but not trained.** No number in
   this README comes from it.
