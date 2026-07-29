@@ -39,3 +39,27 @@ def test_command_annotations_resolve(command):
         f"`agentgym {command} --help` failed -- a broken annotation here disables every "
         f"command, including rollout:\n{proc.stderr[-800:]}"
     )
+
+
+def test_build_datasets_refuses_to_overwrite(tmp_path):
+    """The quickstart runs this command; its default target holds the published corpora.
+
+    Overwriting them is unrecoverable and silent -- every later training run would use
+    different data while every reported number still claimed to describe the old data.
+    """
+    import json
+    import subprocess
+    import sys
+
+    out = tmp_path / "sft"
+    out.mkdir()
+    (out / "sft_train.jsonl").write_text(json.dumps({"messages": []}) + "\n")
+    before = (out / "sft_train.jsonl").read_text()
+
+    r = subprocess.run(
+        [sys.executable, "-m", "agentgym.cli", "build-datasets", "--out-dir", str(out)],
+        capture_output=True, text=True, timeout=300)
+
+    assert r.returncode != 0, "a populated output directory must not be silently replaced"
+    assert "refusing to overwrite" in (r.stderr + r.stdout).lower()
+    assert (out / "sft_train.jsonl").read_text() == before, "the file was modified anyway"

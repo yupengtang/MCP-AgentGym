@@ -532,7 +532,10 @@ python -m agentgym.cli doctor          # starts a control plane and verifies it
 python -m agentgym.cli gen-incidents --n 1200 --seed 11
 python -m agentgym.cli rollout --policy expert --limit 20 --verbose
 python -m agentgym.cli stats  $AGENTGYM_RUNS/expert-clean
-python -m agentgym.cli build-datasets  # SFT/DPO + contamination check
+python -m agentgym.cli build-datasets --out-dir $AGENTGYM_DATA/sft-demo
+                                       # SFT/DPO + contamination check.
+                                       # Refuses to overwrite an existing dataset
+                                       # dir; omit --out-dir on a fresh checkout.
 ```
 
 Batch work on Slurm:

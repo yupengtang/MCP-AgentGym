@@ -122,8 +122,17 @@ def build_datasets(
     out_dir: Path | None = typer.Option(None),
     eval_fraction: float = typer.Option(0.2, help="Share of in-distribution incidents held out."),
     seed: int = typer.Option(0),
+    overwrite: bool = typer.Option(
+        False, help="Replace existing datasets. Off by default; see below."),
 ) -> None:
-    """Curate SFT / DPO datasets and run the contamination check."""
+    """Curate SFT / DPO datasets and run the contamination check.
+
+    Refuses to replace existing datasets unless --overwrite is passed. The default output
+    directory holds the corpora every published result was trained on, and this command
+    appears in the README quickstart with no arguments -- so following the quickstart on a
+    populated checkout would silently retrain-from-different-data forever after, with
+    nothing to indicate the numbers had stopped being reproducible.
+    """
     import random
 
     from agentgym.data import curate
@@ -133,6 +142,13 @@ def build_datasets(
     files = sorted(src.glob("*.jsonl")) if src.is_dir() else [src]
     all_traj = [t for f in files for t in traj_mod.read_jsonl(f)]
     out = out_dir or (cfg.DATA_DIR / "sft")
+    existing = sorted(p.name for p in out.glob("*.jsonl")) if out.exists() else []
+    if existing and not overwrite:
+        typer.echo(f"refusing to overwrite {len(existing)} dataset(s) in {out}:", err=True)
+        typer.echo(f"  {', '.join(existing[:6])}", err=True)
+        typer.echo("  pass --out-dir <new> to build elsewhere, or --overwrite to replace.",
+                   err=True)
+        raise typer.Exit(code=1)
     out.mkdir(parents=True, exist_ok=True)
 
     # Everything outside in-distribution is evaluation by construction; additionally
