@@ -668,7 +668,36 @@ Stated as open rather than quietly omitted.
 
 ## Engineering notes worth keeping
 
-Six problems that cost real time and had non-obvious answers.
+Seven problems that cost real time and had non-obvious answers.
+
+**Two harnesses that disagreed, and the rule that saved the result.** Testing whether the
+attenuation finding generalises to the SFT adapter produced a contradiction: the arm serving
+the *published* SFT adapter did not reproduce the *published* SFT row. On the same 64
+incidents, same adapter, temperature 0.0 — root cause **0.0% vs 20.3%**, invalid calls
+**0.1% vs 16.0%**.
+
+The cause was a step budget. `serve_and_eval.sbatch`, which produced every published table,
+runs `--max-steps 20`; the sweep script had been written with 24. Those four extra turns are
+where a policy that has run out of ideas starts inventing tools — `get_statefulset`,
+`create_configmap`, `get_namespace`, none of which exist in the 36-tool registry. A policy
+does not fail gracefully when it runs out of budget; it fails by hallucinating, and giving
+it more room produces *more* of that, not less.
+
+Nothing errored. Both harnesses ran to completion and produced complete, plausible tables
+that told different stories about the same weights.
+
+**The frontier dose-response survives this, and not by luck of the numbers.** Every arm of
+that sweep shared one harness, and the report script was written from the start to compare
+`s` against `s` internally, refusing cross-harness comparison — a rule adopted to prevent a
+*population* confound from differing `--limit`. It happened to also block a confound nobody
+anticipated. The `s = 1.0` arm's agreement with the published DPO-435 row now reads as
+fortunate rather than guaranteed.
+
+**The SFT generalisation test does not survive**, and is withheld rather than reported: a
+remedy cannot be evaluated against a baseline that is not the published baseline. `MAX_STEPS`
+is now a variable defaulting to 20, and a second defect surfaced alongside — the scaled-GRPO
+sweep had been submitted without an `s = 1.0` reference arm, on the assumption the published
+row could stand in for one. Both were resubmitted.
 
 **The serial-rollout bug, written twice.** The adapter-scale sweep was submitted with an
 unsharded rollout loop and measured 3 episodes in 18 minutes — about 64 hours for the full
