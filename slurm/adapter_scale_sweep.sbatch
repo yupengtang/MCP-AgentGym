@@ -41,21 +41,24 @@ TEMPLATE="src/agentgym/train/agentgym_chat_template.jinja"
 export HF_HUB_OFFLINE=1 VLLM_LOGGING_LEVEL=WARNING
 mkdir -p "$OUT"
 
-for d in "$FULL" "$SCALED/dpo5-s025" "$SCALED/dpo5-s05" "$SCALED/dpo5-s075"; do
+# name=path pairs served as LoRA modules. Overridable so the same sweep can attenuate a
+# different adapter family -- the mechanism under test is closed-catalogue fine-tuning, not
+# one checkpoint, so it has to be runnable against more than one.
+MODULES="${MODULES:-dpo5s025=$SCALED/dpo5-s025 dpo5s05=$SCALED/dpo5-s05 dpo5s075=$SCALED/dpo5-s075 dpo5s10=$FULL}"
+for spec in $MODULES; do
+  d="${spec#*=}"
   [ -f "$d/adapter_model.safetensors" ] || { echo "missing adapter: $d"; exit 1; }
 done
 
-echo "=== serving base + 4 adapter scales on one engine ==="
+echo "=== serving base + adapter scales on one engine ==="
+echo "    modules: $MODULES"
 "$AGENTGYM_VLLM_VENV/bin/python" -m vllm.entrypoints.openai.api_server \
   --model "$MODEL" --served-model-name "$MODEL" \
   --port "$PORT" --host 127.0.0.1 \
   --max-model-len 32768 --gpu-memory-utilization 0.88 \
   --chat-template "$TEMPLATE" \
   --enable-lora --max-lora-rank 32 --max-loras 4 \
-  --lora-modules "dpo5s025=$SCALED/dpo5-s025" \
-                 "dpo5s05=$SCALED/dpo5-s05" \
-                 "dpo5s075=$SCALED/dpo5-s075" \
-                 "dpo5s10=$FULL" \
+  --lora-modules $MODULES \
   --disable-log-requests > "$AGENTGYM_RUNS/vllm-scale-$SLURM_JOB_ID.log" 2>&1 &
 VLLM_PID=$!
 trap 'kill $VLLM_PID 2>/dev/null || true' EXIT
