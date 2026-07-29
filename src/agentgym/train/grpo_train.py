@@ -124,11 +124,17 @@ def make_reward_fn(tokenizer):
 # --- dataset -----------------------------------------------------------------
 
 def build_prompts(trajectory_path: Path, tokenizer, *, max_prompts: int,
-                  seed: int) -> list[dict[str, Any]]:
+                  seed: int, max_prompt_tokens: int | None = None) -> list[dict[str, Any]]:
     """Turn verified trajectories into (prompt, expert action) pairs.
 
     Each pair is a prefix of a real episode, so the model is optimised on states it will
     actually encounter rather than on synthetic conversations.
+
+    Prompts longer than `max_prompt_tokens` are dropped rather than truncated. TRL 1.9
+    removed `max_prompt_length` from `GRPOConfig`, so nothing downstream enforces a bound;
+    truncating here would silently cut the head of a conversation -- the system prompt
+    carrying the tool catalogue -- and the model would then be optimised on states it never
+    sees at inference. Dropping is the honest option, and the count is reported.
     """
     from agentgym.data import trajectory as traj_mod
     from agentgym.data.curate import _messages_for
@@ -162,6 +168,16 @@ def build_prompts(trajectory_path: Path, tokenizer, *, max_prompts: int,
                 "unsafe": unsafe,
             })
 
+    if max_prompt_tokens:
+        kept = [r for r in rows
+                if len(tokenizer(r["prompt"], add_special_tokens=False)["input_ids"])
+                <= max_prompt_tokens]
+        dropped = len(rows) - len(kept)
+        if dropped:
+            print(f"dropped {dropped}/{len(rows)} prompts over {max_prompt_tokens} tokens "
+                  f"({dropped / len(rows):.1%})", flush=True)
+        rows = kept
+
     rng = random.Random(seed)
     rng.shuffle(rows)
     return rows[:max_prompts]
@@ -182,7 +198,8 @@ def main() -> None:
         tokenizer.pad_token = tokenizer.eos_token
 
     rows = build_prompts(args.trajectories, tokenizer,
-                         max_prompts=args.max_prompts, seed=args.seed)
+                         max_prompts=args.max_prompts, seed=args.seed,
+                         max_prompt_tokens=args.max_prompt_length)
     if not rows:
         raise SystemExit(f"no usable prompts under {args.trajectories}")
     dataset = Dataset.from_list(rows)
@@ -217,7 +234,10 @@ def main() -> None:
         per_device_train_batch_size=args.batch_size,
         gradient_accumulation_steps=args.grad_accum,
         num_generations=args.num_generations,
-        max_prompt_length=args.max_prompt_length,
+        # `max_prompt_length` was removed from GRPOConfig in TRL 1.9. Passing it raises
+        # TypeError at construction -- which this trainer did for as long as it existed,
+        # undetected, because it had no launcher and was never run. The bound is now
+        # applied in `build_prompts`, which drops over-long prompts and reports how many.
         max_completion_length=args.max_completion_length,
         temperature=args.temperature,
         beta=args.beta,
