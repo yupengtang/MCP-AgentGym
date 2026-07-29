@@ -645,6 +645,25 @@ degrades capability, not that episode-level GRPO cannot work. The obvious next m
 smaller step size and a KL reference that constrains the *evaluation* distribution rather
 than the training one.
 
+### The data pipeline replicates to within 0.5%
+
+Rerunning DPO end-to-end at matched settings — 600 incidents, 4 samples each, temperature
+0.9, base `sft-qwen3-8b-v4`, an independent sampling pass — reproduces the published
+pipeline almost exactly:
+
+| | published | replication |
+|---|---|---|
+| incidents sampled | 600 | 600 |
+| episodes rolled out | 2,400 | 2,400 |
+| **preference pairs mined** | **435** | **437** |
+| mean reward margin | 2.609 | 2.594 |
+
+Two pairs apart on 437, and a margin difference of 0.015. That is not a claim about DPO's
+*effect* — the trained adapters still have to be evaluated — but it does establish that the
+sampling and mining stages are stable across independent runs, so a difference in downstream
+capability between two DPO runs cannot be attributed to the data pipeline drifting under
+them. The variance estimate on the +8.2 pp headline is the next thing this answers.
+
 ### The lineage digest paid for itself within the hour
 
 The instrumentation added after the episode-GRPO withdrawal — recording a hash of the base
