@@ -33,7 +33,9 @@ SCALED="${SCALED:-$AGENTGYM_ARTIFACTS/scaled}"
 PORT="${PORT:-8${SLURM_JOB_ID: -3}}"
 LIMIT="${LIMIT:-64}"
 SPLITS="${SPLITS:-in_distribution unseen_fault}"
-OUT="$AGENTGYM_RUNS/eval-scale"
+# Separate OUT per sweep: mixing cells of different --limit into one directory
+# would let scale_report average populations of different size and composition.
+OUT="${OUT:-$AGENTGYM_RUNS/eval-scale}"
 TEMPLATE="src/agentgym/train/agentgym_chat_template.jinja"
 
 export HF_HUB_OFFLINE=1 VLLM_LOGGING_LEVEL=WARNING
@@ -77,7 +79,8 @@ echo "engine ready"
 # why it is easy to write a second time.
 SHARDS="${SHARDS:-8}"
 FAILED=0
-for SERVED in "$MODEL" dpo5s025 dpo5s05 dpo5s075 dpo5s10; do
+VARIANTS="${VARIANTS:-$MODEL dpo5s025 dpo5s05 dpo5s075 dpo5s10}"
+for SERVED in $VARIANTS; do
   VARIANT="$SERVED"; [ "$SERVED" = "$MODEL" ] && VARIANT="base"
   for split in $SPLITS; do
     dest="$OUT/$VARIANT-$split-clean.jsonl"
