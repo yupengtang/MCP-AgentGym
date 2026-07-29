@@ -206,6 +206,36 @@ is behaviour. Mean reward margin 2.61. The two DPO rows are a controlled ablatio
 count and are analysed below — the headline is that the extra data helped where it came
 from and not elsewhere.
 
+### CORRECTED — the preference-data ablation does not replicate
+
+**The headline below (+11.0 pp in-distribution from 5× the preference data) is retracted.**
+An independent DPO run at matched settings — 600 incidents, 437 pairs against the original's
+435, mean margin 2.594 against 2.609 — scores **53.1%** in-distribution, which is *exactly*
+the 88-pair run's number. The +11.0 pp was run-to-run variance.
+
+| in-distribution resolution | pairs | result |
+|---|---|---|
+| SFT | — | 53.1% |
+| DPO run A | 88 | 53.1% |
+| DPO run B | 435 | 64.1% |
+| **DPO run C (replication of B)** | **437** | **53.1%** |
+
+The difference was never significance-tested when first reported; it is z = 1.27, and the
+replication lands on the null. Two things follow, and the second matters more than the first.
+
+**On pair count:** between 88 and ~435 pairs there is no detectable effect on capability.
+DPO itself still helps — all three runs beat SFT on unseen topologies (56.2%, 51.6%, 50.0%
+against 32.8%) — but *how many pairs* does not, in this range.
+
+**On every other single-run number in this README:** two runs of an identical recipe differ
+by **11 pp in-distribution** at n = 64 per cell. That is the measurement floor. Differences
+smaller than roughly 15 pp between single runs are not interpretable here, and the tables
+below should be read with that in mind. The frontier sweep survives this because its effect
+is 35.8 pp with a monotone dose-response across three levels, not because it used a
+different method.
+
+<details><summary>The original (retracted) analysis, kept for the record</summary>
+
 ### The preference-data ablation
 
 DPO was run twice — identical method, starting adapter and evaluation, differing only in
@@ -284,6 +314,8 @@ agent everywhere — **the held-out fault-family split exists precisely to preve
 sentence from being written.** It is also the one axis where 5× the preference data barely
 moved anything (+1.5 pp), which is consistent: the gap is a coverage problem, not a
 data-volume problem.
+
+</details>
 
 ### Robustness to tool-schema shift
 
@@ -543,14 +575,31 @@ this objective rather than a problem: advantages are zero-mean within a group, s
 complete groups the expected term sits near zero and the learning signal is the correlation
 between advantage and log-probability. "Loss went down" is the wrong health check here.
 
-**WITHDRAWN — the first run trained from the wrong base adapter.** The result reported here
-compared an adapter derived from `sft-qwen3-8b-v2` against SFT and DPO rows derived from
-`sft-qwen3-8b-v4`; the two bases differ by 178% relative, and the rollouts it trained on came
-from the v4 policy. So it was cross-lineage *and* off-policy, and nothing about episode-level
-GRPO can be concluded from it. Retraining from v4 is in flight. What follows is kept only to
-record what was withdrawn and why.
+**Result, from the correct base** (`sft-qwen3-8b-v4`, verified 1.13% away against 121% for
+the stale default). Four clean splits, `n = 256`:
 
-~~**Result: it did not work as a capability method, and that is the informative part.**~~
+| variant | all splits | in-dist | unseen fault | unseen topo | compositional | invalid calls | reward |
+|---|---|---|---|---|---|---|---|
+| SFT | 40.6% | 53.1% | 29.7% | 32.8% | 46.9% | 0.6% | 1.08 |
+| **SFT + episode-GRPO** | **44.9%** | 56.2% | 28.1% | 45.3% | 50.0% | **0.2%** | **1.22** |
+| — with β = 0.2 | 43.0% | 48.4% | 31.2% | 43.8% | 48.4% | 0.4% | 1.13 |
+| SFT + DPO (two runs) | 48.8% / 46.1% | 64.1% / 53.1% | 31.2% / 32.8% | 51.6% / 50.0% | 48.4% / 48.4% | 0.2% / 0.0% | 1.32 / 1.23 |
+
+Episode-level GRPO lands **+4.3 pp over SFT** (z = 0.98, not significant at this size) and
+inside the range spanned by two DPO runs. **Tool-call validity is untouched: 0.2% invalid.**
+
+**An earlier version of this section reported the opposite** — 35.5% resolution and a
+0.2% → 15.2% invalid-call regression, written up as "advantage-weighted likelihood damages
+the format SFT taught." That run had initialised from a stale default base two versions
+behind, while training on rollouts from the correct one. The mechanism story was plausible,
+internally consistent, and entirely an artifact. It is [quarantined](reports/EXPERIMENTS.md),
+not deleted.
+
+**And the convergent-evidence claim that rested on it is withdrawn.** That run appeared to
+independently restore the collapsed label prior (9/165 emissions); the corrected runs emit
+**0/253 and 0/248**. Episode-GRPO does *not* recover the prior. The label-prior mechanism now
+rests on adapter attenuation alone — where it is a monotone dose-response at z = 5.97 — and
+not on two independent interventions.
 Across all four clean splits (`n = 256`) it reaches 35.5% resolution against SFT's 40.6%
 and DPO-435's 48.8%, with invalid tool calls regressing **0.2% → 15.2%**. Advantage-weighted
 likelihood pushes down on low-reward episodes, and those are full of well-formed calls that

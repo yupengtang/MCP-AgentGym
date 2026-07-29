@@ -645,6 +645,43 @@ degrades capability, not that episode-level GRPO cannot work. The obvious next m
 smaller step size and a KL reference that constrains the *evaluation* distribution rather
 than the training one.
 
+### What the replication settled: three corrections, two of them to published claims
+
+The DPO replication and the two corrected episode-GRPO runs landed together. All four clean
+splits complete, `n = 64` per cell.
+
+**1. The pair-count ablation does not replicate — retracted.** The published +11.0 pp
+in-distribution gain from 5× the preference data is run-to-run variance. A second run at 437
+pairs scores **53.1%**, identical to the 88-pair run and 11 pp below the 435-pair run it
+replicates. The original difference was never significance-tested; it is z = 1.27. Between 88
+and ~435 pairs there is no detectable capability effect. DPO over SFT survives — all three
+runs beat SFT on unseen topologies (56.2 / 51.6 / 50.0 against 32.8) — but the pair-count
+conclusion does not.
+
+**2. The measurement floor is ~11 pp, and that governs the whole document.** Two runs of an
+identical recipe differ by 11 pp in-distribution and 2.7 pp overall. At `n = 64` per cell,
+*no single-run difference below roughly 15 pp is interpretable*. This is the most useful
+thing the replication bought, and it should have been established before any ablation was
+reported rather than after. The frontier dose-response clears it — 35.8 pp, monotone across
+three levels, z = 5.97 — which is now a load-bearing distinction rather than a stylistic one.
+
+**3. Episode-GRPO does not damage capability; the earlier finding was the wrong base.** From
+`sft-qwen3-8b-v4` it reaches **44.9%** against SFT's 40.6%, inside the range two DPO runs
+span, with **0.2% invalid calls**. The withdrawn run reported 35.5% and a 0.2% → 15.2%
+invalid-call regression, explained at the time by advantage-weighted likelihood eroding
+SFT's format. That explanation was mechanistically plausible and completely wrong: it
+described an adapter initialised two versions behind the rollouts it trained on.
+
+**And the convergent-evidence claim is withdrawn.** The wrong-base run appeared to
+independently restore the collapsed label prior (9/165 emissions, against base's 7.1%); the
+corrected runs emit **0/253** and **0/248**. Episode-GRPO does not recover the prior. The
+label-prior mechanism rests on attenuation alone.
+
+That last one is worth sitting with. The convergent argument was the strongest claim in this
+document — two interventions sharing no mechanism, both restoring a prior that training had
+zeroed, therefore the cause is identified. It was built on an artifact, and the artifact was
+persuasive precisely because it agreed with a result that was independently true.
+
 ### The data pipeline replicates to within 0.5%
 
 Rerunning DPO end-to-end at matched settings — 600 incidents, 4 samples each, temperature
