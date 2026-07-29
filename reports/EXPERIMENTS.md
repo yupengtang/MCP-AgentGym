@@ -550,10 +550,10 @@ accidental; `test_group_members_stay_adjacent` now pins it.
 
 Stated as open rather than quietly omitted.
 
-- **Episode-level GRPO is implemented and dry-run verified on 2,388 episodes, but a full
-  training run has not been executed** — the loop is a sample-then-train job whose cost is
-  dominated by rollout, and it has not yet been given the GPU hours. No result from it is
-  claimed anywhere.
+- **Episode-level GRPO is trained; its evaluation is in flight.** 149 optimizer steps over
+  2,388 episodes in 597 groups, KL to the frozen SFT reference drifting 0.011 → 0.022,
+  truncation 0.88% against 1.2% predicted. No capability number from it is claimed until
+  the ten-cell evaluation completes.
 - **Action-level GRPO** (`grpo_train.py`) is implemented but its trained policy has not
   been evaluated in the tables above.
 - **Node-layer sim-to-real fidelity.** `src/agentgym/fidelity.py` validates the process

@@ -476,8 +476,19 @@ margin while a group uses the whole reward distribution.
 Length normalisation and degenerate-group dropping are both load-bearing and both pinned by
 tests — without the first the objective prefers long episodes whenever the advantage is
 positive, and without the second empty groups dilute batches while the step count claims
-otherwise. Implemented and dry-run verified; **a full training run has not been executed,
-and no result from it is claimed.**
+otherwise.
+
+**Trained**: 149 optimizer steps over 2,388 episodes in 597 groups. KL to the frozen SFT
+reference drifts from 0.011 to 0.022 across the run (max 0.038), and 21 of 2,388 episodes
+hit the 12,288-token cap — 0.88%, against the 1.2% predicted from a 250-episode length
+sample before the cap was chosen. The policy-gradient term is near-evenly signed across
+logged steps (15 negative, 14 positive, mean −0.14), which is the *correct* signature for
+this objective rather than a problem: advantages are zero-mean within a group, so over
+complete groups the expected term sits near zero and the learning signal is the correlation
+between advantage and log-probability. "Loss went down" is the wrong health check here.
+
+**Its evaluation is still running, so no capability number from it appears anywhere in this
+README.**
 
 ---
 
