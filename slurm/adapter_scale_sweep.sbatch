@@ -80,6 +80,10 @@ echo "engine ready"
 # minutes, which puts this sweep at ~64 hours. This is the same defect as the DPO sampler's
 # `--shard-total 1` (reports/EXPERIMENTS.md) -- it never errors, it is only slow, which is
 # why it is easy to write a second time.
+# serve_and_eval.sbatch uses 20. A sweep at 24 is not comparable to the published
+# tables: the extra turns are where a policy that has run out of ideas starts
+# inventing tools, which shows up as invalid calls the published runs never had.
+MAX_STEPS="${MAX_STEPS:-20}"
 SHARDS="${SHARDS:-8}"
 FAILED=0
 VARIANTS="${VARIANTS:-$MODEL dpo5s025 dpo5s05 dpo5s075 dpo5s10}"
@@ -93,7 +97,7 @@ for SERVED in $VARIANTS; do
     for s in $(seq 0 $((SHARDS - 1))); do
       python -m agentgym.cli rollout \
         --policy llm --split "$split" --perturbation clean \
-        --limit "$LIMIT" --temperature 0.0 --max-steps 24 \
+        --limit "$LIMIT" --temperature 0.0 --max-steps "$MAX_STEPS" \
         --shard-index "$s" --shard-total "$SHARDS" \
         --gym-offset $((520 + s * 3)) \
         --base-url "http://127.0.0.1:$PORT/v1" --model "$SERVED" \
