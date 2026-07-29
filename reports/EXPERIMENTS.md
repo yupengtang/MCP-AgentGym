@@ -670,21 +670,41 @@ Stated as open rather than quietly omitted.
 
 Seven problems that cost real time and had non-obvious answers.
 
-**Two harnesses that disagreed, and the rule that saved the result.** Testing whether the
+**CORRECTED — two harnesses that never disagreed; I compared two different adapters.** Testing whether the
 attenuation finding generalises to the SFT adapter produced a contradiction: the arm serving
 the *published* SFT adapter did not reproduce the *published* SFT row. On the same 64
 incidents, same adapter, temperature 0.0 — root cause **0.0% vs 20.3%**, invalid calls
 **0.1% vs 16.0%**.
 
-The cause was a step budget. `serve_and_eval.sbatch`, which produced every published table,
-runs `--max-steps 20`; the sweep script had been written with 24. Those four extra turns are
-where a policy that has run out of ideas starts inventing tools — `get_statefulset`,
-`create_configmap`, `get_namespace`, none of which exist in the 36-tool registry. A policy
-does not fail gracefully when it runs out of budget; it fails by hallucinating, and giving
-it more room produces *more* of that, not less.
+**The first diagnosis was wrong.** The harnesses differ in step budget — 20 published
+against 24 in the sweep — and the sweep's failures were hallucinated tools
+(`get_statefulset`, `create_configmap`, `get_namespace`, none in the 36-tool registry),
+which fits a policy running past the end of its ideas. Rerunning the sweep at
+`--max-steps 20` should then have reconciled them.
 
-Nothing errored. Both harnesses ran to completion and produced complete, plausible tables
-that told different stories about the same weights.
+It did not. At 20 the sweep still gave 45.3% resolved / 23.4% root cause / 18.3% invalid,
+essentially unchanged from 24 and still nothing like the published 29.7% / 0.0% / 0.1%. The
+step budget explained none of it.
+
+**The actual cause: there are four SFT adapters, and the two runs served different ones.**
+`artifacts/` holds `sft-qwen3-8b`, `-v2`, `-v3` and `-v4`. The published `sft` trajectories
+were written at 01:05 on 2026-07-28; `-v4` was written at 00:51 the same morning. The sweep
+served `-v2`, which `train_dpo.sbatch` and `train_episode_grpo.sbatch` both take as their
+default base. `v2` and `v4` are not near each other — sampled `lora_B` tensors differ by
+**121% relative**, none identical.
+
+So the two runs were never measuring the same weights, and the "harnesses disagree"
+conclusion was an artifact of my own comparison. The system prompt hash is identical across
+both (`591a3ab98e19`), which had already ruled out the prompt-contract class of bug and
+should have pointed here sooner.
+
+Two things follow that are worth more than the retraction. **The step-budget change is kept
+anyway**: matching the published harness is correct regardless of what explained this, and a
+sweep that is not comparable to the published tables is a trap left armed. And **a real
+lineage question is now open** — if the published `sft` row is `v4` while DPO and
+episode-GRPO were trained from `v2`, then every "DPO over SFT" comparison in this document
+spans two different base adapters. Job 5547208 serves both against the same incidents to
+settle which produced the published row; nothing downstream is claimed until it lands.
 
 **The frontier dose-response survives this, and not by luck of the numbers.** Every arm of
 that sweep shared one harness, and the report script was written from the start to compare
