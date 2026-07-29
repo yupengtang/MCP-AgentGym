@@ -397,6 +397,13 @@ Monotone at every step, both adjacent comparisons significant (z = 3.55, z = 2.2
 In-distribution performance is not measurably harmed: 67.2% at s=0.5 against 65.6% at
 s=1.0, z = 0.27.
 
+**It replicates on a different adapter family.** Scaling the *SFT* adapter — different
+objective, different data, independently trained — reproduces the effect to within 1.6 pp:
+unseen-fault resolution **35.8% → 70.0%** (+34.2 pp, z = 5.64), root cause 0.8% → 18.3%
+(z = 4.82), held-out labels 1/116 → 22/55, and no measurable in-distribution cost
+(−3.1 pp, z = −0.51). Two policies trained by different methods collapse the same way and
+recover the same way.
+
 A dose-response across three levels is the strongest evidence available here that the cause
 is update *magnitude* rather than anything incidental to one checkpoint — and the prior is
 recoverable precisely because the labels were never removed from the model, only pushed

@@ -645,6 +645,43 @@ degrades capability, not that episode-level GRPO cannot work. The obvious next m
 smaller step size and a KL reference that constrains the *evaluation* distribution rather
 than the training one.
 
+### The attenuation effect replicates across adapter families
+
+The dose-response was established on DPO-435. Whether it was a property of *closed-catalogue
+fine-tuning* or of that one checkpoint was the open question — and the honest answer mattered,
+because the convergent-evidence argument that would have settled it turned out to rest on a
+wrong-base artifact.
+
+Scaling the SFT adapter instead — a different objective, different data, independently
+trained — reproduces it almost exactly. Both at the held-out split's 120-incident ceiling,
+same harness, each with its own `s = 1.0` reference arm:
+
+| | DPO-435 | SFT-v4 |
+|---|---|---|
+| unseen-fault resolved, s = 1.0 | 36.7% | 35.8% |
+| unseen-fault resolved, s = 0.5 | **72.5%** | **70.0%** |
+| gain | **+35.8 pp** (z = 5.97) | **+34.2 pp** (z = 5.64) |
+| unseen-fault root cause, s = 1.0 → 0.5 | 0.0% → 20.0% | 0.8% → 18.3% (z = 4.82) |
+| held-out labels emitted, s = 1.0 | 0/114 | 1/116 |
+| held-out labels emitted, s = 0.5 | 24/56 | 22/55 |
+| in-distribution cost | +1.6 pp (z = 0.27) | −3.1 pp (z = −0.51) |
+
+Two adapters trained by different methods, collapsed to the same near-zero label prior, and
+recovered by the same weight-space intervention to within 1.6 pp of each other on every
+measured quantity. Both gains are roughly **3× the ~11 pp measurement floor** established by
+the DPO replication, which is why they are reportable where the pair-count ablation was not.
+
+**This is what the withdrawn convergent-evidence claim should have been.** That argument
+paired attenuation with episode-level GRPO and was wrong, because the GRPO run had trained
+from a stale base; the corrected runs emit 0/253 and 0/248 held-out labels and recover
+nothing. The replacement is not two mechanisms agreeing but one mechanism reproducing on two
+independently-trained policies — weaker as a causal story, far stronger as evidence, and it
+does not depend on a result that has since been retracted.
+
+The mechanism claim now stands as: **fine-tuning hard on a closed catalogue drives
+never-demonstrated labels below every competitor, and attenuating the update recovers them,
+monotonically, on every adapter tested.**
+
 ### What the replication settled: three corrections, two of them to published claims
 
 The DPO replication and the two corrected episode-GRPO runs landed together. All four clean
