@@ -197,8 +197,17 @@ Aggregated over every clean cell (`n = 256` per variant):
 | SFT + DPO (88 pairs) | 47.3% | 40.6% | 32.4% | 0.1% | 10.1 | 1.27 |
 | **SFT + DPO (435 pairs)** | **48.8%** | **44.1%** | **34.4%** | **0.1%** | **10.2** | **1.32** |
 
-Base → best post-trained: **+16.0 pp resolution, +5.0 pp root cause, and invalid tool
-calls from 26.3% to 0.1%.** Neither post-trained variant ever took an unsafe action.
+**What this table does and does not establish.** Base → best post-trained is
+**+16.0 pp resolution** (z = 3.73) with invalid tool calls collapsing **26.3% → 0.1%**, and
+no post-trained variant ever took an unsafe action. Those hold.
+
+**The ranking among post-trained variants does not.** At n = 256 per arm the differences
+between SFT, DPO and episode-GRPO are all inside the noise — SFT vs DPO-435 is z = 1.87,
+SFT vs episode-GRPO z = 0.98, the two DPO runs z = 0.61. An independent DPO replication
+differing by 11 pp in-distribution set the measurement floor at ~11 pp, so **this project
+shows that post-training works and does not show which method is best.** A larger run
+(n = 601 per arm, the maximum the splits allow) is under way to resolve it; until it lands,
+read the post-trained rows as one band rather than an ordering.
 
 Preference pairs were mined from four sampled attempts at the *same* incident, ranked by
 the executable reward — so both sides faced an identical cluster and the only difference
