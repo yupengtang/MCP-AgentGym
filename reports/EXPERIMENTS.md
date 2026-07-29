@@ -645,6 +645,40 @@ degrades capability, not that episode-level GRPO cannot work. The obvious next m
 smaller step size and a KL reference that constrains the *evaluation* distribution rather
 than the training one.
 
+### What this environment can and cannot measure
+
+The variant ranking was rerun at the maximum size the incident pool allows: 256
+in-distribution plus the 120/120/105 the other splits cap at, **601 per arm**.
+
+| | SFT | DPO-435 | Δ | z |
+|---|---|---|---|---|
+| resolution | 46.6% | 50.9% | +4.3 pp | 1.49 |
+| root-cause accuracy | 41.6% | 47.3% | +5.7 pp | **1.99** |
+| invalid calls | 0.30% | 0.21% | — | — |
+| mean reward | 1.25 | 1.38 | — | — |
+
+DPO is ahead on **all four splits** (+5.5, +4.2, +5.0, +1.0), a sign test at p = 0.0625.
+Root cause just clears threshold; resolution does not. With a multiple-comparison
+correction across the metrics reported here, neither would.
+
+**The ceiling is structural.** Resolving the observed +4.3 pp at 80% power requires
+**n ≈ 2,119 per arm**; 601 is everything the four splits contain. So this is not a run to
+repeat with more compute — the incident pool would have to grow, and growing it changes the
+splits and breaks comparability with everything already published.
+
+That gives the environment a stated resolution, which is more useful than a ranking:
+
+| effect size | example | verdict |
+|---|---|---|
+| ~35 pp | attenuation on held-out faults | decisive, z ≈ 6, replicated |
+| ~16 pp | base → post-trained | decisive, z = 3.73 |
+| ~11 pp | run-to-run variance of one recipe | the noise floor |
+| ~4 pp | DPO over SFT | below what 601 episodes can separate |
+
+Every claim in this document should be read against that table. The two findings the project
+rests on sit far above the floor; the method ranking sits below it and is reported as
+unresolved rather than as a result.
+
 ### The attenuation effect replicates across adapter families
 
 The dose-response was established on DPO-435. Whether it was a property of *closed-catalogue

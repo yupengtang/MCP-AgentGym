@@ -67,10 +67,14 @@ of the claims below are claims at all.
 
 **Not established, and labelled as such wherever it appears:**
 
-- **Which post-training method is best.** SFT vs DPO is z = 1.87; SFT vs episode-GRPO
-  z = 0.98; two runs of the *same* DPO recipe z = 0.61. Read the post-trained rows as one
-  band, not an ordering. A larger comparison (`n = 601` per arm, the maximum the splits
-  allow) is running.
+- **Which post-training method is best — and this evaluation cannot settle it.** Rerun at
+  `n = 601` per arm, the maximum the incident pool allows, DPO-435 beats SFT by **+4.3 pp
+  resolution (z = 1.49)** and **+5.7 pp root-cause accuracy (z = 1.99)**, ahead on all four
+  splits (sign test p = 0.0625). The direction is consistent; only root cause clears
+  threshold, and only barely. Resolving a 4.3 pp effect at 80% power needs **n ≈ 2,119
+  against a ceiling of 601** — so this is a *structural* limit of the current incident
+  pool, not a run that needs repeating. The honest claim is that DPO helps and the effect
+  is roughly half what a single run first suggested.
 - **That preference-data volume matters.** Retracted — a replication at 437 pairs scored
   identically to the 88-pair run.
 - **Anything about a second base model.** Everything here is Qwen3-8B.
