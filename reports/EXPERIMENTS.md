@@ -645,6 +645,28 @@ degrades capability, not that episode-level GRPO cannot work. The obvious next m
 smaller step size and a KL reference that constrains the *evaluation* distribution rather
 than the training one.
 
+### The lineage digest paid for itself within the hour
+
+The instrumentation added after the episode-GRPO withdrawal — recording a hash of the base
+adapter's *weights* into every training output — caught its second case immediately.
+
+A second DPO run had been submitted to put a variance estimate on the headline +8.2 pp,
+before the sbatch default was corrected. Its saved reference hashes to `2c9d616c7c6eff12`,
+which is `sft-qwen3-8b-v2`, not the `31388a5ef825d248` that `dpo-qwen3-8b-v5` and
+`sft-qwen3-8b-v4` share. Wrong base, same defect as before, caught in one line rather than
+by comparing file timestamps and sampled tensors.
+
+It was wrong a second way, which the digest could not catch and arithmetic could: it sampled
+600 episodes and mined **86 pairs**, where the published run sampled 2,400 and mined **435**.
+The cause was `LIMIT=150` against the published run's 600 incidents. A "replication" at a
+quarter of the sampling budget is confounded with pair count — the *one* variable the
+ablation established as dominant — so it would have answered a question nobody asked while
+looking like an answer to the one that was. `LIMIT` now defaults to the published 600 with
+the reason recorded beside it.
+
+Both invalid runs are quarantined rather than deleted, and 5547595 replicates at matched
+settings.
+
 ### Withdrawn runs are quarantined, not deleted
 
 `eval.report` reads `runs/eval/` recursively, so the withdrawn episode-GRPO trajectories

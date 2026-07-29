@@ -32,7 +32,11 @@ ADAPTER="${ADAPTER:-$AGENTGYM_ARTIFACTS/sft-qwen3-8b-v4}"
 OUT="${OUT:-$AGENTGYM_ARTIFACTS/dpo-qwen3-8b}"
 PORT="${PORT:-8${SLURM_JOB_ID: -3}}"
 SAMPLES="${SAMPLES:-4}"
-LIMIT="${LIMIT:-120}"
+# 600 incidents x 4 samples = the 2,400 episodes that produced the published 435-pair
+# run. A replication at a different LIMIT is confounded with pair count, which the
+# ablation in reports/EXPERIMENTS.md showed is the dominant variable -- so the default
+# is the published value rather than a round number.
+LIMIT="${LIMIT:-600}"
 TEMPERATURE="${TEMPERATURE:-0.9}"
 # Per-run output paths. These were hard-coded, which meant a second DPO run silently
 # overwrote the rollouts and preference pairs backing the published DPO-435 result -- and
