@@ -86,7 +86,7 @@ Grafana is kept only because Prometheus is already there and the dashboards are 
   (seeded, 14 fault      (real apiserver + simulated kubelet/mesh)       │
    families)                        │                                    │
                                     ▼                                    │
-                          MCP gateway (4 servers, 26 typed tools)         │
+                          MCP gateway (4 servers, 36 typed tools)         │
                           + schema-shift perturbation layer               │
                                     │                                    │
                                     ▼                                    │
@@ -168,7 +168,7 @@ produces 1,000+ instances with held-out splits (§6).
 
 ## 4. MCP layer
 
-Four MCP servers over the real protocol, 26 typed tools, every argument schema-validated:
+Four MCP servers over the real protocol, 36 typed tools, every argument schema-validated:
 
 - **`mcp-kubernetes`** — `list_pods`, `describe_pod`, `get_pod_logs`, `list_events`,
   `get_deployment`, `patch_deployment_resources`*, `scale_deployment`*, `set_image`*,

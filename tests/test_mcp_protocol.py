@@ -111,3 +111,31 @@ async def test_observability_tools_over_protocol(episode):
         assert isinstance(services, list) and services
         assert {"service", "available", "ready_endpoints"} <= set(services[0])
         break
+
+
+def test_documented_tool_count_matches_the_registry():
+    """The docs quote a tool count in five places; the registry is the only source of truth.
+
+    PROJECT.md carried 26 for weeks after the registry reached 36 -- nothing failed, the
+    diagram simply described a smaller system than the one that shipped. A number repeated
+    across documents drifts silently unless something checks it.
+    """
+    import re
+    from pathlib import Path
+
+    from agentgym.mcp.tools import REGISTRY
+
+    root = Path(__file__).resolve().parents[1]
+    pattern = re.compile(r"(\d+) typed tools")
+    found: dict[str, set[str]] = {}
+    for name in ("README.md", "PROJECT.md", "DESIGN.md"):
+        f = root / name
+        if f.exists():
+            hits = set(pattern.findall(f.read_text()))
+            if hits:
+                found[name] = hits
+
+    assert found, "no document quotes a tool count; this guard has nothing to protect"
+    for name, hits in found.items():
+        assert hits == {str(len(REGISTRY))}, (
+            f"{name} claims {sorted(hits)} typed tools but the registry has {len(REGISTRY)}")
