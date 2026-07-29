@@ -430,6 +430,15 @@ arm reproduces the published DPO-435 row (62.5% vs 64.1% in-distribution, 27.1% 
 unseen fault, both within noise) and the s = 0.00 arm reproduces base — so the scaling
 machinery and the serving path are the same ones that produced the tables above.
 
+**The held-out fault axis is narrow, and that bounds every claim made on it.** The
+`unseen_fault` split contains **120 incidents across exactly two fault families**
+(`NetworkPolicyDeny`, `NodeNotReady`). 120 is a hard ceiling, discovered by asking for 128
+and receiving 120 with all eight shards reporting evenly and no failures — so no
+unseen-fault comparison anywhere in this document can be strengthened by sampling more.
+Widening it means generating incidents for more held-out families, which changes the split
+definition and invalidates comparison against every number already published here. Stated
+because "held out" sounds broader than two families are.
+
 **Contamination, reported rather than absorbed.** Three cells logged control-plane settle
 timeouts: one each in the two s = 0.00 cells and s = 0.25/in-distribution, and **five of 48
 in s = 0.25/unseen-fault** (~10%). Those episodes had their verdicts taken against a world
