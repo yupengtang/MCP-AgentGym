@@ -543,8 +543,26 @@ this objective rather than a problem: advantages are zero-mean within a group, s
 complete groups the expected term sits near zero and the learning signal is the correlation
 between advantage and log-probability. "Loss went down" is the wrong health check here.
 
-**Its evaluation is still running, so no capability number from it appears anywhere in this
-README.**
+**Result: it did not work as a capability method, and that is the informative part.**
+Across all four clean splits (`n = 256`) it reaches 35.5% resolution against SFT's 40.6%
+and DPO-435's 48.8%, with invalid tool calls regressing **0.2% → 15.2%**. Advantage-weighted
+likelihood pushes down on low-reward episodes, and those are full of well-formed calls that
+simply did not resolve the incident — so the format SFT taught is collateral damage.
+
+**But it independently reversed the label-prior collapse.** It emits the two
+never-demonstrated diagnosis labels 9 times in 165 submissions (5.5%, against base's 7.1%)
+where SFT and DPO emit them 0 and 1 times in ~250; on held-out faults its root-cause
+accuracy is **14.1%, exactly matching base**, versus 0.0% and 1.6%.
+
+That is the finding worth keeping. Two interventions with nothing in common — scaling the
+LoRA update in weight space, and on-policy RL against a verifiable reward — both restore a
+prior that supervised and preference training drove to zero. Convergent evidence that the
+cause is *optimising hard toward a closed catalogue*, not anything specific to one
+objective or checkpoint. Both pay for it in different currency: attenuation costs
+in-distribution sharpness, GRPO costs tool-call validity.
+
+One run, one learning rate, one epoch — evidence that the method *as configured* degrades
+capability, not that episode-level GRPO cannot work.
 
 ---
 

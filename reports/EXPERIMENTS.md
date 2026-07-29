@@ -589,6 +589,62 @@ adjacent is what lets each accumulation window span whole groups and cancel the 
 inside it — the variance reduction GRPO exists to buy. The ordering was correct but
 accidental; `test_group_members_stay_adjacent` now pins it.
 
+### Episode-level GRPO: a negative capability result, and convergent evidence for the mechanism
+
+All four clean-split cells complete (`n = 64` each; the six perturbation cells are still
+running and no robustness number is claimed yet).
+
+| variant | in-dist | unseen fault | unseen topo | compositional | **all** | invalid calls | reward |
+|---|---|---|---|---|---|---|---|
+| base | 34.4% | 48.4% | 29.7% | 18.8% | 32.8% | 26.3% | 0.10 |
+| SFT | 53.1% | 29.7% | 32.8% | 46.9% | 40.6% | 0.6% | 1.08 |
+| SFT+DPO-435 | 64.1% | 31.2% | 51.6% | 48.4% | **48.8%** | 0.2% | **1.32** |
+| **SFT+episode-GRPO** | 45.3% | 40.6% | 23.4% | 32.8% | **35.5%** | **15.2%** | 0.39 |
+
+**As a capability method at these settings, it did not work.** 35.5% overall against SFT's
+40.6% and DPO's 48.8%, with mean tool calls up from 10.2 to 13.0 and reward down from 1.32
+to 0.39. The clearest damage is to tool-call validity: **0.2% → 15.2% invalid calls**,
+three-quarters of the way back to the untrained base model. Advantage-weighted likelihood
+pushes *down* on low-reward episodes, and those episodes are full of well-formed tool calls
+that simply did not resolve the incident — so the format SFT taught is collateral.
+
+This was checked for defects before being reported as a result. The saved adapter differs
+from its SFT initialisation on every sampled tensor (mean relative change 0.54%, max 1.02%),
+so training genuinely moved the policy; the KL of 0.011 → 0.022 was measured on the
+*training* rollouts and bounds nothing on unseen evaluation prompts.
+
+**But it independently reversed the label-prior collapse.** Emissions of the two
+never-demonstrated diagnosis labels, across all splits:
+
+```
+base            16 / 225 submissions   7.1%
+SFT              0 / 244                0.0%
+DPO-88           0 / 254                0.0%
+DPO-435          1 / 250                0.4%
+episode-GRPO     9 / 165                5.5%
+```
+
+and on held-out faults its root-cause accuracy is **14.1% — exactly base's 14.1%**, against
+0.0% for SFT and 1.6% for DPO-435.
+
+This matters more than the capability number. Two interventions with nothing in common —
+**scaling the LoRA update in weight space**, and **on-policy RL against a verifiable
+reward** — both restore a prior that supervised and preference training had driven to zero.
+That is convergent evidence that the collapse is caused by *optimising hard toward a closed
+catalogue*, rather than by anything specific to one objective, one checkpoint, or one
+weight-space direction. Either result alone would be suggestive; together they identify the
+cause.
+
+Both also pay for it, in the same currency. Attenuation trades in-distribution sharpness;
+GRPO trades tool-call validity. Nothing here recovers held-out coverage for free.
+
+**Not claimed.** Episode-GRPO's unseen-fault edge over DPO-435 (40.6% vs 31.2%) does *not*
+reach significance at `n = 64` (z = 1.11). One run at one learning rate, one KL coefficient,
+one epoch, on rollouts from the SFT policy — this is evidence that the method as configured
+degrades capability, not that episode-level GRPO cannot work. The obvious next moves are a
+smaller step size and a KL reference that constrains the *evaluation* distribution rather
+than the training one.
+
 ## 7. Open items
 
 Stated as open rather than quietly omitted.
