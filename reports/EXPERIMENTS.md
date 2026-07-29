@@ -645,6 +645,18 @@ degrades capability, not that episode-level GRPO cannot work. The obvious next m
 smaller step size and a KL reference that constrains the *evaluation* distribution rather
 than the training one.
 
+### Withdrawn runs are quarantined, not deleted
+
+`eval.report` reads `runs/eval/` recursively, so the withdrawn episode-GRPO trajectories
+rendered as an ordinary capability row — same shape, same formatting, nothing marking them
+as retracted. Regenerating the tables would have republished them. That is the same failure
+mode as the stale-file report earlier in this log, and it is why the retraction needed a
+filesystem action and not just a paragraph.
+
+Withdrawn runs move to `runs/eval-withdrawn/<name>/` with a README recording what they
+measured, why they are invalid, and what supersedes them. Deleting them would make the
+retraction unverifiable; leaving them in place would make it ineffective.
+
 ## 7. Open items
 
 Stated as open rather than quietly omitted.
