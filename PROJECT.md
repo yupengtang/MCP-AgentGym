@@ -295,7 +295,11 @@ Kubernetes for persistent serving, stateful agent execution, and isolated incide
 - [x] Episode-level GRPO implemented and dry-run verified *(597/600 groups usable;
       training run in flight, no result claimed from it yet)*
 - [ ] Action-level GRPO policy trained and evaluated *(trainer written, not run)*
-- [ ] SGLang backend benchmarked *(interface implemented, not yet measured)*
+- [ ] SGLang **benchmarked against a live server** *(`SGLangBackend` is implemented
+      and its interchangeability with `VLLMBackend` is asserted by
+      `tests/test_backend_pluggability.py` — identical request payload, identical
+      parsing, no reimplementation. Not benchmarked: `sglang` needs a third
+      environment and the home quota on this cluster is exhausted.)*
 - [ ] Node-layer sim-to-real fidelity *(process layer validated 5/5 against real
       processes, real `RLIMIT_AS` and real HTTP/TCP; the container layer has no
       real-runtime comparison and no fidelity claim is made for it)*
