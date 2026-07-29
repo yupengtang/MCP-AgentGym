@@ -21,6 +21,11 @@
 #
 # The -3.5 is sized so a well-formed forbidden action scores below emitting nothing
 # parseable (-0.5 against 0.0), which tests/test_reward.py asserts.
+#
+# Batch size is 2, not 8. GRPO holds `num_generations` completions per prompt in memory at
+# once, so the real forward width is batch x generations -- 8 x 8 = 64 sequences of up to
+# 6.4k tokens OOMed a 44 GB L40S immediately. Accumulation is raised to keep the effective
+# batch at 32.
 
 set -euo pipefail
 cd "${AGENTGYM_REPO:-$HOME/projects/Engineering/MCP-AgentGym}"
@@ -52,8 +57,8 @@ python -m agentgym.train.grpo_train \
   --epochs "${EPOCHS:-1}" \
   --lr "${LR:-1e-6}" \
   --num-generations "${NUM_GEN:-8}" \
-  --batch-size "${BATCH:-8}" \
-  --grad-accum "${GRAD_ACCUM:-4}" \
+  --batch-size "${BATCH:-2}" \
+  --grad-accum "${GRAD_ACCUM:-16}" \
   --max-prompt-length "${MAX_PROMPT:-6144}" \
   --max-completion-length "${MAX_COMPLETION:-256}" \
   --temperature "${TEMPERATURE:-1.0}" \
