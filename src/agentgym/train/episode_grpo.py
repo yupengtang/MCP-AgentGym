@@ -174,6 +174,30 @@ def build_examples(scored: list[tuple[Any, float]]) -> list[dict[str, Any]]:
     ]
 
 
+def _adapter_digest(adapter_dir: Path) -> str:
+    """Hash of an adapter's *weights*, so lineage is checkable rather than assumed.
+
+    Hashes tensor contents in sorted key order rather than the file bytes. Two saves of the
+    same policy differ as files -- serialisation order and metadata are not stable -- so a
+    file hash answers "is this the same file", which is not the question. `dpo-v5/ref` and
+    `sft-qwen3-8b-v4` are the same policy and hash identically here; they do not as files.
+    """
+    import hashlib
+
+    f = Path(adapter_dir) / "adapter_model.safetensors"
+    if not f.exists():
+        return "missing"
+    from safetensors import safe_open
+
+    h = hashlib.sha256()
+    with safe_open(str(f), framework="pt") as fh:
+        for key in sorted(fh.keys()):
+            h.update(key.encode())
+            t = fh.get_tensor(key)
+            h.update(t.float().cpu().numpy().tobytes())
+    return h.hexdigest()[:16]
+
+
 def _collate(examples, tokenizer, max_len: int, counters: dict[str, int] | None = None):
     """Tokenise with a loss mask over the assistant's own tokens only.
 
@@ -439,6 +463,13 @@ def _train(args, examples: list[dict[str, Any]]) -> None:
     tokenizer.save_pretrained(str(args.output_dir))
     seen = len(examples) * max(1, int(args.epochs))
     counters["episodes_seen"] = seen
+    # Record which adapter this run started from. An earlier run silently trained from a
+    # stale default two versions behind the one every published row derives from; the two
+    # differ by 178% and nothing anywhere recorded which had been used, so the lineage had
+    # to be reconstructed afterwards from file timestamps and a saved reference adapter.
+    if args.sft_adapter:
+        counters["base_adapter"] = str(args.sft_adapter)
+        counters["base_adapter_sha256"] = _adapter_digest(args.sft_adapter)
     counters["truncation_rate"] = round(counters.get("truncated", 0) / max(1, seen), 4)
     (args.output_dir / "train_log.json").write_text(
         json.dumps({"steps": log, "counters": counters}, indent=2))

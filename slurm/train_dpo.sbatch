@@ -25,7 +25,10 @@ source env.sh
 module load cuda/12.6.1 2>/dev/null || true
 
 MODEL="${MODEL:-Qwen/Qwen3-8B}"
-ADAPTER="${ADAPTER:-$AGENTGYM_ARTIFACTS/sft-qwen3-8b-v2}"
+# v4 is the SFT adapter every published row derives from -- verified by DPO-v5's
+# saved reference adapter being byte-identical to it. The default used to be v2,
+# which is 178% away and produced a silently cross-lineage episode-GRPO result.
+ADAPTER="${ADAPTER:-$AGENTGYM_ARTIFACTS/sft-qwen3-8b-v4}"
 OUT="${OUT:-$AGENTGYM_ARTIFACTS/dpo-qwen3-8b}"
 PORT="${PORT:-8${SLURM_JOB_ID: -3}}"
 SAMPLES="${SAMPLES:-4}"

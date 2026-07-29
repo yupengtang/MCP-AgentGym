@@ -543,7 +543,14 @@ this objective rather than a problem: advantages are zero-mean within a group, s
 complete groups the expected term sits near zero and the learning signal is the correlation
 between advantage and log-probability. "Loss went down" is the wrong health check here.
 
-**Result: it did not work as a capability method, and that is the informative part.**
+**WITHDRAWN — the first run trained from the wrong base adapter.** The result reported here
+compared an adapter derived from `sft-qwen3-8b-v2` against SFT and DPO rows derived from
+`sft-qwen3-8b-v4`; the two bases differ by 178% relative, and the rollouts it trained on came
+from the v4 policy. So it was cross-lineage *and* off-policy, and nothing about episode-level
+GRPO can be concluded from it. Retraining from v4 is in flight. What follows is kept only to
+record what was withdrawn and why.
+
+~~**Result: it did not work as a capability method, and that is the informative part.**~~
 Across all four clean splits (`n = 256`) it reaches 35.5% resolution against SFT's 40.6%
 and DPO-435's 48.8%, with invalid tool calls regressing **0.2% → 15.2%**. Advantage-weighted
 likelihood pushes down on low-reward episodes, and those are full of well-formed calls that
