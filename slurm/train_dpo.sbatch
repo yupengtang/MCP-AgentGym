@@ -31,10 +31,28 @@ PORT="${PORT:-8${SLURM_JOB_ID: -3}}"
 SAMPLES="${SAMPLES:-4}"
 LIMIT="${LIMIT:-120}"
 TEMPERATURE="${TEMPERATURE:-0.9}"
-SAMPLE_DIR="$AGENTGYM_RUNS/dpo-samples"
+# Per-run output paths. These were hard-coded, which meant a second DPO run silently
+# overwrote the rollouts and preference pairs backing the published DPO-435 result -- and
+# the same rollouts episode-GRPO trained on. Nothing would have errored; the files would
+# simply have been different afterwards.
+SAMPLE_DIR="${SAMPLE_DIR:-$AGENTGYM_RUNS/dpo-samples}"
+PAIRS="${PAIRS:-$AGENTGYM_DATA/sft/dpo_pairs.jsonl}"
 
 export HF_HUB_OFFLINE=1 VLLM_LOGGING_LEVEL=WARNING
 mkdir -p "$OUT" "$SAMPLE_DIR"
+
+# A run that overwrites its inputs is unrecoverable and produces no error, so it has to be
+# opted into explicitly rather than avoided by remembering to pass SAMPLE_DIR.
+if [ -z "${OVERWRITE:-}" ] && compgen -G "$SAMPLE_DIR/samples*.jsonl" > /dev/null; then
+  echo "REFUSING TO RUN: $SAMPLE_DIR already holds samples ($(cat "$SAMPLE_DIR"/samples-*.jsonl 2>/dev/null | wc -l) episodes)." >&2
+  echo "  Pass SAMPLE_DIR=<new dir> for an independent run, or OVERWRITE=1 to replace them." >&2
+  exit 1
+fi
+if [ -z "${OVERWRITE:-}" ] && [ -s "$PAIRS" ]; then
+  echo "REFUSING TO RUN: $PAIRS already exists ($(wc -l < "$PAIRS") pairs)." >&2
+  echo "  Pass PAIRS=<new path> for an independent run, or OVERWRITE=1 to replace it." >&2
+  exit 1
+fi
 
 echo "=== phase 1: serve the SFT policy and sample $SAMPLES attempts per incident ==="
 "$AGENTGYM_VLLM_VENV/bin/python" -m vllm.entrypoints.openai.api_server \
@@ -82,6 +100,7 @@ stop_engine
 trap - EXIT
 
 echo "=== phase 2: mine pairs ==="
+export PAIRS SAMPLE_DIR
 python - <<'PY'
 import json, os
 from pathlib import Path
@@ -89,11 +108,13 @@ from agentgym import config
 from agentgym.data import curate
 from agentgym.data import trajectory as T
 
-samples = Path(os.environ["AGENTGYM_RUNS"]) / "dpo-samples" / "samples.jsonl"
+# Read from the same directory phase 1 wrote to. Deriving this independently meant a
+# run with a custom SAMPLE_DIR sampled into one place and mined pairs from another.
+samples = Path(os.environ["SAMPLE_DIR"]) / "samples.jsonl"
 trajectories = T.read_jsonl(samples)
 eval_ids = set(json.loads((config.DATA_DIR / "sft" / "eval_incident_ids.json").read_text()))
 pairs, stats = curate.build_dpo(trajectories, eval_incident_ids=eval_ids)
-out = config.DATA_DIR / "sft" / "dpo_pairs.jsonl"
+out = Path(os.environ["PAIRS"])
 curate.write_jsonl(pairs, out)
 print(json.dumps(stats, indent=2))
 if not pairs:
@@ -103,7 +124,7 @@ PY
 
 echo "=== phase 3: DPO ==="
 python -m agentgym.train.dpo_train \
-  --pairs-file "$AGENTGYM_DATA/sft/dpo_pairs.jsonl" \
+  --pairs-file "$PAIRS" \
   --sft-adapter "$ADAPTER" \
   --output-dir "$OUT" \
   --epochs "${EPOCHS:-1}" \
