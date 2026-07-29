@@ -650,12 +650,24 @@ than the training one.
 The variant ranking was rerun at the maximum size the incident pool allows: 256
 in-distribution plus the 120/120/105 the other splits cap at, **601 per arm**.
 
-| | SFT | DPO-435 | Δ | z |
-|---|---|---|---|---|
-| resolution | 46.6% | 50.9% | +4.3 pp | 1.49 |
-| root-cause accuracy | 41.6% | 47.3% | +5.7 pp | **1.99** |
-| invalid calls | 0.30% | 0.21% | — | — |
-| mean reward | 1.25 | 1.38 | — | — |
+| variant | in-dist | unseen fault | unseen topo | compositional | **all (601)** | root cause | invalid | reward |
+|---|---|---|---|---|---|---|---|---|
+| SFT | 57.8% | 33.3% | 35.0% | 47.6% | 46.6% | 41.6% | 0.30% | 1.25 |
+| DPO-435 | **63.3%** | 37.5% | **40.0%** | 48.6% | **50.9%** | **47.3%** | 0.21% | **1.38** |
+| episode-GRPO | 61.3% | **38.3%** | 32.5% | **52.4%** | 49.4% | 44.8% | 0.25% | 1.33 |
+
+Every pairwise comparison is unresolved:
+
+```
+SFT  vs DPO-435       +4.3 pp   z = 1.50
+SFT  vs episode-GRPO  +2.8 pp   z = 0.98
+GRPO vs DPO-435       +1.5 pp   z = 0.52
+```
+
+DPO leads SFT on all four splits (sign test p = 0.0625) and its root-cause gain reaches
+z = 1.99 — the single comparison that touches threshold, and it would not survive a
+multiple-comparison correction. No variant wins consistently: DPO takes in-distribution and
+unseen topology, episode-GRPO takes unseen faults and compositional.
 
 DPO is ahead on **all four splits** (+5.5, +4.2, +5.0, +1.0), a sign test at p = 0.0625.
 Root cause just clears threshold; resolution does not. With a multiple-comparison

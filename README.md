@@ -74,7 +74,10 @@ of the claims below are claims at all.
   threshold, and only barely. Resolving a 4.3 pp effect at 80% power needs **n ≈ 2,119
   against a ceiling of 601** — so this is a *structural* limit of the current incident
   pool, not a run that needs repeating. The honest claim is that DPO helps and the effect
-  is roughly half what a single run first suggested.
+  is roughly half what a single run first suggested. At the same power, episode-GRPO
+  (49.4%) sits between them and is separable from neither — `SFT vs GRPO z = 0.98`,
+  `GRPO vs DPO z = 0.52`. **All three post-training methods occupy one 4.3 pp band this
+  evaluation cannot resolve**, while every one of them clears base (32.8%) decisively.
 - **That preference-data volume matters.** Retracted — a replication at 437 pairs scored
   identically to the 88-pair run.
 - **Anything about a second base model.** Everything here is Qwen3-8B.
