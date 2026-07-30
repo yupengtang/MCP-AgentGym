@@ -31,7 +31,8 @@ SPLITS = ["in_distribution", "unseen_fault", "unseen_topology", "compositional"]
 # Preferred display order; anything else is appended so an arm can never vanish silently.
 # Grouped so the table reads as the comparison it is: an undertrained baseline and what
 # post-training buys on it, against a properly trained baseline and the same question.
-ORDER = ["base", "sft-p2", "dpo5-p2", "grpo-p2", "actgrpo-p2", "sft2-p2", "dpo3ep-p2"]
+ORDER = ["base", "sft-p2", "dpo5-p2", "grpo-p2", "actgrpo-p2",
+         "sft2ep1-p2", "sft2-p2", "dpo3ep-p2"]
 LABEL = {
     "base": "base (untrained)",
     "sft-p2": "SFT 2 epochs (published baseline)",
@@ -40,6 +41,7 @@ LABEL = {
     "actgrpo-p2": "SFT + action-GRPO",
     "sft2-p2": "SFT 3 epochs",
     "dpo3ep-p2": "SFT 3ep + DPO-309",
+    "sft2ep1-p2": "SFT 2 epochs (seed 1)",
 }
 # The 2-epoch SFT and everything built on it; then the 3-epoch SFT and the same.
 EPOCH2 = ["sft-p2", "dpo5-p2", "grpo-p2", "actgrpo-p2"]

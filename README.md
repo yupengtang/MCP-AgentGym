@@ -13,63 +13,87 @@ why — is in [PROJECT.md](PROJECT.md).
 
 ---
 
-## Two findings, and why they are believable
+## The result: post-training on a closed catalogue is a trade, not an improvement
 
-**1. Post-training on a closed catalogue silently destroys a capability, and the damage is
-reversible without retraining.**
+At `n = 2,200` per arm on 5,000 incidents no model has seen. Bonferroni threshold for the
+42 comparisons reported is z > 3.0.
 
-Fine-tuned on 12 of 14 fault families, the model stops being able to name the other two —
-**0 emissions in 599 submissions** for SFT and 0 in 626 for DPO, against 5.0% for the
-untrained base. Both labels are in the tool schema and the system prompt on *every*
-episode; the policy is not blind to them, it is unable to reach them. It substitutes a
-confident wrong answer from the training catalogue instead.
+| | in-distribution | **held-out faults** | unseen topology | compositional | **all** | invalid calls |
+|---|---|---|---|---|---|---|
+| base, untrained | 33.4% | **65.8%** | 24.6% | 22.4% | 36.3% | **26.3%** |
+| SFT (2 epochs) | 59.4% | 40.6% | 28.2% | 33.4% | 42.1% | 0.35% |
+| best trained (SFT 3ep + DPO) | **71.3%** | 38.2% | **52.0%** | **40.8%** | **52.5%** | 0.32% |
 
-A LoRA update enters each layer as `ΔW = (α/r)·B@A`, so multiplying `lora_B` by `s` scales
-it exactly. Sweeping `s` recovers the lost labels **monotonically**:
+```
+what training buys   resolution  +16.2 pp   z = +10.96
+                     root cause  +14.2 pp   z =  +9.57
+                     invalid tool calls  26.3% -> 0.3%   ~100x
 
-| s | unseen-fault resolution | held-out labels emitted |
+what it costs        held-out fault families  -27.6 pp   z = -19.06
+```
+
+**Both sides clear significance by a wide margin, and both dwarf every difference between
+post-training methods.** The untrained model is the *best* agent in this project on fault
+families it was never trained for — 65.8% against 33–41% for everything trained — and the
+worst everywhere else.
+
+That trade is the project's central finding, and the mechanism behind it is measurable:
+fine-tuning drives the never-demonstrated diagnosis labels to **0 emissions in 599
+submissions** (base: 5.0%), even though both labels sit in the tool schema and system
+prompt on every episode. The model is not blind to them; it can no longer reach them.
+
+**And the trade is reversible after the fact, without retraining.** A LoRA update enters
+each layer as `ΔW = (α/r)·B@A`, so scaling `lora_B` by `s` scales it exactly:
+
+| s | held-out resolution | held-out labels emitted |
 |---|---|---|
 | 1.00 (trained) | 36.7% | **0 / 114** |
 | 0.75 | 50.8% | 8 / 112 |
 | **0.50** | **72.5%** | **24 / 56** |
 
-**z = 5.97 end-to-end**, both adjacent steps significant, **no measurable in-distribution
-cost** — and it **replicates on a second, independently-trained adapter family to within
-1.6 pp** (SFT: 35.8% → 70.0%, z = 5.65). One mechanism, two policies trained by different
-objectives, same recovery.
+Monotone, **z = 5.97** end-to-end, no measurable in-distribution cost — and it **replicates
+on a second, independently-trained adapter family to within 1.6 pp** (SFT: 35.8% → 70.0%,
+z = 5.65). One knob, applied at serving time, moves a model along the specialization axis
+after training has finished.
 
-**2. The training seed moves the result more than any method does — so most of this
-project's method comparisons are not interpretable, and it says so.**
+## What this project cannot tell you, and says so
 
-Two SFT runs, identical hyperparameters and data, differing only in random seed:
+**Which post-training method is best.** Two SFT runs differing only in random seed are
+**12.6 pp apart (z = 5.00)** — three times the largest method effect, and the only such
+comparison that clears significance:
 
 | comparison | Δ resolution | z |
 |---|---|---|
-| **SFT seed A → SFT seed B, same recipe** | **+12.6 pp** | **5.00** |
+| **SFT seed A → seed B, identical recipe** | **+12.6 pp** | **5.00** |
 | SFT 2 epochs → 3 epochs, same seed | −4.1 pp | −1.69 |
 | SFT → + DPO (435 pairs) | +4.0 pp | 1.54 |
 | SFT → + episode-level GRPO | +3.3 pp | 1.26 |
 | SFT → + action-level GRPO | −1.3 pp | −0.50 |
 
-**The seed is three times the largest method effect and the only row that clears
-significance.** DPO and both GRPO variants were each trained once, so their measured gains
-sit inside the spread one recipe produces by reseeding. Claiming any of them helps needs
-several seeds per arm; this project has not done that, and does not claim it.
+DPO and both GRPO variants were trained once each, so their gains sit inside the spread one
+recipe produces by reseeding. Establishing that any of them helps needs several seeds per
+arm, which has not been done here.
 
-Getting here took three revisions, each downward, each after removing a confound or adding
-power: DPO's "+8.2 pp" became +2.1 pp under power, the residual was reattributed to a
-missing training epoch, and the epoch turned out to be the seed. **Every increase in rigour
-moved the answer toward "no measurable difference"** — which is what a null looks like when
-you approach it honestly rather than stopping at the first flattering number.
+Reaching that took three revisions, each downward, each after removing a confound or adding
+power: DPO's "+8.2 pp" became +2.1 pp; the residual was reattributed to a missing training
+epoch; the epoch turned out to be the seed. **Every increase in rigour moved the answer
+toward "no measurable difference."** The two findings above survive because neither is a
+single-run A-vs-B comparison — one is a 16 pp effect with z = 11, the other a dose-response
+across four levels replicated on two adapter families.
 
-Finding 1 survives all of this because it was never a single-run comparison: a
-dose-response across four levels, replicated on two independently-trained adapters, z ≈ 6.
+## Why believe any of it
 
-**Why believe any of it.** Because the same discipline that produced these also retracted
-four of this project's earlier claims, and every retraction is in
-[reports/EXPERIMENTS.md](reports/EXPERIMENTS.md) with the defect that caused it and the
-assertion that now prevents it. The measurement floor, the multiple-comparison correction,
-and the refusal to read a partial grid are all in the code, not the prose.
+The discipline that produced the results above also retracted four of this project's
+earlier claims. Every retraction is in [reports/EXPERIMENTS.md](reports/EXPERIMENTS.md)
+with the defect that caused it and the assertion that now prevents it — including a
+result that was published, contradicted by a later run, and withdrawn with its
+trajectories quarantined rather than deleted.
+
+The guards are in the code, not the prose: the report script refuses to render a partial
+grid, a test asserts every tool count quoted in the docs matches the registry, another
+asserts the serving numbers are recomputable from their raw artifacts, training records a
+weight digest of its base adapter so lineage is checkable, and `build-datasets` refuses to
+overwrite the corpora the published results were trained on.
 
 ---
 
