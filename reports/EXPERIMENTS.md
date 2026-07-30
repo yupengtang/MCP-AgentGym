@@ -657,6 +657,41 @@ degrades capability, not that episode-level GRPO cannot work. The obvious next m
 smaller step size and a KL reference that constrains the *evaluation* distribution rather
 than the training one.
 
+### DPO's one significant result does not survive a properly trained baseline
+
+In-distribution cell complete for all four arms, n = 700 each, fresh incidents. The other
+three splits are still running and nothing below is claimed beyond in-distribution.
+
+| variant | resolved | root cause | invalid calls | reward |
+|---|---|---|---|---|
+| SFT 2 epochs — the published baseline | 59.4% | 59.0% | 0.23% | 1.62 |
+| &nbsp;&nbsp;+ DPO-435 | 63.4% | **66.9%** | 0.17% | 1.76 |
+| **SFT 3 epochs** | **67.9%** | **68.0%** | 0.03% | 1.89 |
+| &nbsp;&nbsp;+ DPO-309 | 71.3% | 70.3% | 0.03% | 1.99 |
+
+```
+DPO on the 2-epoch base   root cause  +7.9 pp   z = 3.05   significant
+DPO on the 3-epoch base   root cause  +2.3 pp   z = 0.93   not significant
+```
+
+**A third SFT epoch delivers what DPO delivers.** 3-epoch SFT alone reaches 68.0% root
+cause; 2-epoch SFT *plus* DPO reaches 66.9%. And on the better base DPO's diagnostic gain
+falls to +2.3 pp and stops being detectable — the single statistically significant
+between-method result in this document, evaluated against a baseline that was undertrained.
+
+This is consistent with the pair-mining counters above, which showed the signal thinning
+before any adapter was trained: the 3-epoch policy yields 309 pairs against 437 because its
+attempts are too alike in quality to rank. Less to disagree about, less for DPO to learn.
+
+**What is not claimed.** DPO is not shown to be useless: it still adds +3.4 pp resolution
+on the better base (z = 1.40), the direction is positive on every metric, and this is one
+split. What *is* shown is that the reported benefit was measured against a baseline with
+an epoch of training left in it, and most of that benefit was the missing epoch.
+
+The honest revision of this project's headline: **post-training helps, and roughly half of
+what was attributed to preference optimisation is attributable to training the supervised
+baseline to convergence first.**
+
 ### A better base yields less preference signal
 
 Mining DPO pairs from the 3-epoch SFT, at settings identical to the 2-epoch run — 600
