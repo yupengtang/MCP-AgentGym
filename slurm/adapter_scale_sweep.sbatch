@@ -83,6 +83,9 @@ echo "engine ready"
 # serve_and_eval.sbatch uses 20. A sweep at 24 is not comparable to the published
 # tables: the extra turns are where a policy that has run out of ideas starts
 # inventing tools, which shows up as invalid calls the published runs never had.
+# Optional alternate incident pool. The v2 generator is prefix-stable, so a larger
+# pool can be evaluated without renaming anything in the published one.
+INCIDENTS="${INCIDENTS:-}"
 MAX_STEPS="${MAX_STEPS:-20}"
 SHARDS="${SHARDS:-8}"
 FAILED=0
@@ -97,6 +100,7 @@ for SERVED in $VARIANTS; do
     for s in $(seq 0 $((SHARDS - 1))); do
       python -m agentgym.cli rollout \
         --policy llm --split "$split" --perturbation clean \
+        ${INCIDENTS:+--incidents "$INCIDENTS"} \
         --limit "$LIMIT" --temperature 0.0 --max-steps "$MAX_STEPS" \
         --shard-index "$s" --shard-total "$SHARDS" \
         --gym-offset $((520 + s * 3)) \
