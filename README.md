@@ -13,6 +13,53 @@ why — is in [PROJECT.md](PROJECT.md).
 
 ---
 
+## Two findings, and why they are believable
+
+**1. Post-training on a closed catalogue silently destroys a capability, and the damage is
+reversible without retraining.**
+
+Fine-tuned on 12 of 14 fault families, the model stops being able to name the other two —
+**0 emissions in 599 submissions** for SFT and 0 in 626 for DPO, against 5.0% for the
+untrained base. Both labels are in the tool schema and the system prompt on *every*
+episode; the policy is not blind to them, it is unable to reach them. It substitutes a
+confident wrong answer from the training catalogue instead.
+
+A LoRA update enters each layer as `ΔW = (α/r)·B@A`, so multiplying `lora_B` by `s` scales
+it exactly. Sweeping `s` recovers the lost labels **monotonically**:
+
+| s | unseen-fault resolution | held-out labels emitted |
+|---|---|---|
+| 1.00 (trained) | 36.7% | **0 / 114** |
+| 0.75 | 50.8% | 8 / 112 |
+| **0.50** | **72.5%** | **24 / 56** |
+
+**z = 5.97 end-to-end**, both adjacent steps significant, **no measurable in-distribution
+cost** — and it **replicates on a second, independently-trained adapter family to within
+1.6 pp** (SFT: 35.8% → 70.0%, z = 5.65). One mechanism, two policies trained by different
+objectives, same recovery.
+
+**2. An extra epoch of supervised training outweighs every post-training method here.**
+
+| intervention on the published baseline | resolution | z |
+|---|---|---|
+| + DPO (435 pairs) | +2.1 pp | 1.43 |
+| + episode-level GRPO | +2.0 pp | 1.37 |
+| + action-level GRPO | +0.9 pp | 0.61 |
+| **+ one more SFT epoch** | **+8.1 pp** | **5.43** |
+
+At `n = 2,200` per arm on incidents no model has seen, the only detectable effect is the
+epoch. This was found by running the baseline that is easy not to run — and it cost this
+project its headline: the originally reported "+8.2 pp from DPO" was measured against a
+baseline with an epoch of training left in it, and shrank to +2.1 pp under power.
+
+**Why believe any of it.** Because the same discipline that produced these also retracted
+four of this project's earlier claims, and every retraction is in
+[reports/EXPERIMENTS.md](reports/EXPERIMENTS.md) with the defect that caused it and the
+assertion that now prevents it. The measurement floor, the multiple-comparison correction,
+and the refusal to read a partial grid are all in the code, not the prose.
+
+---
+
 ## The idea in one paragraph
 
 Post-training an agent needs thousands of **resettable, seeded, parallel** episodes with
