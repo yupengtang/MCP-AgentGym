@@ -22,10 +22,24 @@
 # The -3.5 is sized so a well-formed forbidden action scores below emitting nothing
 # parseable (-0.5 against 0.0), which tests/test_reward.py asserts.
 #
-# Batch size is 2, not 8. GRPO holds `num_generations` completions per prompt in memory at
-# once, so the real forward width is batch x generations -- 8 x 8 = 64 sequences of up to
-# 6.4k tokens OOMed a 44 GB L40S immediately. Accumulation is raised to keep the effective
-# batch at 32.
+# Memory, decided by measurement rather than by halving until it fits.
+#
+# GRPO holds `num_generations` completions per prompt at once, so the forward width is
+# batch x generations, and the logits tensor is width x tokens x 151,936 vocab. Prompts
+# here are long -- median 4,136 tokens, p90 6,538 -- because every one carries the 36-tool
+# system prompt plus accumulated tool output. batch 8 x gen 8 OOMed instantly; so did
+# batch 2.
+#
+# The remaining lever is a trade between prompts kept and group size:
+#
+#   cap 4096  keeps 48.7% of prompts   gen 8 -> 10.0 GB of logits
+#   cap 6144  keeps 85.0% of prompts   gen 4 ->  7.5 GB
+#
+# Both fit. This takes the second, because dropping half the prompts is not a neutral
+# sample: length correlates with turn depth, so a 4096 cap would silently restrict training
+# to early-episode states and optimise the policy for a distribution it does not face later
+# in an incident. A group of 4 only makes the advantage baseline noisier, which is a
+# variance cost rather than a bias. Accumulation is 32 to hold the effective batch.
 
 set -euo pipefail
 cd "${AGENTGYM_REPO:-$HOME/projects/Engineering/MCP-AgentGym}"
@@ -56,9 +70,9 @@ python -m agentgym.train.grpo_train \
   --output-dir "$OUT" \
   --epochs "${EPOCHS:-1}" \
   --lr "${LR:-1e-6}" \
-  --num-generations "${NUM_GEN:-8}" \
-  --batch-size "${BATCH:-2}" \
-  --grad-accum "${GRAD_ACCUM:-16}" \
+  --num-generations "${NUM_GEN:-4}" \
+  --batch-size "${BATCH:-1}" \
+  --grad-accum "${GRAD_ACCUM:-32}" \
   --max-prompt-length "${MAX_PROMPT:-6144}" \
   --max-completion-length "${MAX_COMPLETION:-256}" \
   --temperature "${TEMPERATURE:-1.0}" \
