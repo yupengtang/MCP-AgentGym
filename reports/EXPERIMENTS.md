@@ -645,6 +645,49 @@ degrades capability, not that episode-level GRPO cannot work. The obvious next m
 smaller step size and a KL reference that constrains the *evaluation* distribution rather
 than the training one.
 
+### The SFT baseline everything is measured against is undertrained
+
+A second SFT run, submitted to estimate seed variance, instead exposed something worse.
+Its training metrics do not match the published adapter's:
+
+| | published SFT (`v4`) | second run |
+|---|---|---|
+| epochs | **2.0** | **3.0** |
+| train loss | 0.0918 | 0.0603 |
+| eval loss | 0.0215 | 0.0193 |
+
+**Every post-training result in this project sits on a 2-epoch base, and a 3-epoch SFT with
+no post-training at all beats all of them** (n = 2,200 per arm, same pool):
+
+| variant | resolution | root cause |
+|---|---|---|
+| SFT 2ep — the published baseline | 42.1% | 36.9% |
+| SFT 2ep + DPO-435 | 44.3% | 41.5% |
+| SFT 2ep + episode-GRPO | 44.2% | 40.5% |
+| **SFT 3ep, no post-training** | **50.3%** | **50.6%** |
+
+```
+3ep SFT vs 2ep + DPO-435   resolution +6.0 pp  z = 3.99   root cause  +9.1 pp  z = 6.08
+3ep SFT vs 2ep + GRPO      resolution +6.1 pp  z = 4.06   root cause +10.1 pp  z = 6.76
+```
+
+**This is confounded and is not yet a result.** The two runs differ in seed *and* epoch
+count, so the gap could be either. But it is large enough to threaten the project's central
+claim: if one more epoch of supervised training buys more than DPO does, then the
+post-training gains reported here may be recovering capability an adequately trained
+baseline would have had for free.
+
+Two runs are in flight to settle it rather than argue it: a 2-epoch SFT at the *same* seed
+as the 3-epoch run, which isolates the epoch effect from the seed effect; and DPO trained
+on top of the 3-epoch SFT, which answers the question that actually matters — whether
+preference optimisation adds anything to a base that is not undertrained.
+
+Note what nearly happened. The +13.8 pp root-cause gap between the two SFT runs was, for
+several minutes, about to be written up as *seed variance so large it invalidates every
+between-method comparison in this document*. That would have been wrong, and checking
+`train_metrics.json` before writing was the only thing that caught it. The right conclusion
+and the catastrophic one differed by one field in a JSON file.
+
 ### The contamination counter over-reported, and checking it was the only way to know
 
 The settle-timeout counter added earlier today fired on the high-power run, and the first
