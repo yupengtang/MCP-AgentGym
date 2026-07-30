@@ -475,21 +475,21 @@ tokens per turn stay small.
 
 | turns | prompt tokens | concurrency | p50 **without** prefix cache | p50 **with** | speedup |
 |---|---|---|---|---|---|
-| 2 | 3,735 | 32 | 13,916 ms | 3,280 ms | 4.2× |
-| 5 | 6,768 | 32 | 26,664 ms | 3,874 ms | 6.9× |
-| 10 | 11,823 | 32 | 47,793 ms | 4,778 ms | 10.0× |
-| 20 | 21,943 | 32 | 82,943 ms | **6,685 ms** | **12.4×** |
+| 2 | 3,735 | 32 | 14,123 ms | 3,250 ms | 4.3× |
+| 5 | 6,768 | 32 | 27,511 ms | 3,833 ms | 7.2× |
+| 10 | 11,823 | 32 | 49,239 ms | 4,687 ms | 10.5× |
+| 20 | 21,943 | 32 | 84,418 ms | **6,576 ms** | **12.8×** |
 
-Throughput at 20 turns / 32 concurrent: **0.27 → 4.61 req/s (17×)**.
+Throughput at 20 turns / 32 concurrent: **0.26 → 4.67 req/s (18×)**.
 
 The clearest way to read it is cost per unit of prompt:
 
 | turns | ms per 1k prompt tokens (no cache) | ms per 1k (cache) |
 |---|---|---|
-| 2 | 3,726 | 878 |
-| 5 | 3,940 | 572 |
-| 10 | 4,042 | 404 |
-| 20 | 3,780 | **305** |
+| 2 | 3,781 | 870 |
+| 5 | 4,065 | 566 |
+| 10 | 4,165 | 396 |
+| 20 | 3,847 | **300** |
 
 Without caching the cost per token is flat — every turn re-reads the whole conversation,
 so total work scales with depth. With caching it *falls* as the conversation grows,

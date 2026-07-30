@@ -113,3 +113,39 @@ def test_distinct_variants_are_not_pooled():
     rows = capability_matrix([FakeTraj("dpo"), FakeTraj("dpo5"), FakeTraj("grpo-episode")])
     assert set(rows) == {"dpo", "dpo5", "grpoepisode"}
     assert all(m["n"] == 1 for m in rows.values()), "one episode each, not pooled"
+
+
+def test_readme_serving_numbers_match_the_stored_benchmark():
+    """Every serving figure in README must be recomputable from artifacts/serving/.
+
+    The README carried 82,943 ms / 6,685 ms / 12.4x / 17x while the stored benchmark said
+    84,418 / 6,576 / 12.8x / 18x -- a stale transcription from an earlier run. Close enough
+    to survive any reading, wrong enough that the shop-window numbers could not be
+    regenerated from what was on disk. Both directions matter, but note this one understated
+    the result, which is the direction nobody re-checks.
+    """
+    import json
+    import os
+    import re
+    from pathlib import Path
+
+    art = Path(os.environ.get("AGENTGYM_ARTIFACTS", "")) / "serving"
+    if not (art / "vllm_prefix_cache_on.json").exists():
+        import pytest
+        pytest.skip("serving benchmark artifacts not present")
+
+    def rows(name):
+        data = json.loads((art / name).read_text())["prefix_scaling"]
+        return {(r["turns"], r["concurrency"]): r for r in data}
+
+    off, on = rows("vllm_prefix_cache_off.json"), rows("vllm_prefix_cache_on.json")
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text()
+
+    a, b = off[(20, 32)], on[(20, 32)]
+    speedup = a["latency_p50_ms"] / b["latency_p50_ms"]
+    tput = b["requests_per_second"] / a["requests_per_second"]
+
+    assert f"{a['latency_p50_ms']:,.0f} ms" in readme, "p50-without does not match the artifact"
+    assert f"{b['latency_p50_ms']:,.0f} ms" in readme, "p50-with does not match the artifact"
+    assert f"{speedup:.1f}×" in readme, f"speedup {speedup:.1f}x is not the one quoted"
+    assert re.search(rf"{tput:.0f}×\)", readme), f"throughput ratio {tput:.0f}x is not quoted"
