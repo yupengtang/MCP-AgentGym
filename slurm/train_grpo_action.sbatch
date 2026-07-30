@@ -22,24 +22,26 @@
 # The -3.5 is sized so a well-formed forbidden action scores below emitting nothing
 # parseable (-0.5 against 0.0), which tests/test_reward.py asserts.
 #
-# Memory, decided by measurement rather than by halving until it fits.
+# Memory, decided by arithmetic after three wrong diagnoses.
 #
-# GRPO holds `num_generations` completions per prompt at once, so the forward width is
-# batch x generations, and the logits tensor is width x tokens x 151,936 vocab. Prompts
-# here are long -- median 4,136 tokens, p90 6,538 -- because every one carries the 36-tool
-# system prompt plus accumulated tool output. batch 8 x gen 8 OOMed instantly; so did
-# batch 2.
+# TRL's GRPO materialises full-vocab logits and `_cast_lm_head_to_fp32` makes them fp32, so
+# one tensor is gen x tokens x 151,936 x 4 bytes and the objective holds roughly three
+# (policy, old policy, reference-via-disabled-adapter). Batch size barely matters; the
+# product that matters is generations x sequence length:
 #
-# The remaining lever is a trade between prompts kept and group size:
+#   gen 4, cap 6144 -> 15.6 GB each, ~54.7 GB total   OOM (this is what failed three times)
+#   gen 4, cap 4096 -> 10.6 GB each, ~39.7 GB total   fits, keeps 48.7% of prompts
+#   gen 2, cap 6144 ->  7.8 GB each, ~31.3 GB total   fits, keeps 85%, but a group of 2
 #
-#   cap 4096  keeps 48.7% of prompts   gen 8 -> 10.0 GB of logits
-#   cap 6144  keeps 85.0% of prompts   gen 4 ->  7.5 GB
+# Reducing batch 8 -> 2 -> 1 changed nothing, because batch was never the term. The
+# identical "tried to allocate 4.08 GiB" in all three logs was the clue.
 #
-# Both fit. This takes the second, because dropping half the prompts is not a neutral
-# sample: length correlates with turn depth, so a 4096 cap would silently restrict training
-# to early-episode states and optimise the policy for a distribution it does not face later
-# in an incident. A group of 4 only makes the advantage baseline noisier, which is a
-# variance cost rather than a bias. Accumulation is 32 to hold the effective batch.
+# Taking gen 4 / cap 4096. A group of 2 standardises to +-1 and is a preference pair
+# wearing GRPO's name, which would make the comparison against DPO meaningless. The cost is
+# real and is recorded rather than hidden: length correlates with turn depth, so a 4096 cap
+# biases training toward early-episode states. That bias is now forced by hardware, not
+# chosen -- and it is why this run is reported as a constrained variant of action-level
+# GRPO rather than as the method evaluated cleanly.
 
 set -euo pipefail
 cd "${AGENTGYM_REPO:-$HOME/projects/Engineering/MCP-AgentGym}"
@@ -73,7 +75,7 @@ python -m agentgym.train.grpo_train \
   --num-generations "${NUM_GEN:-4}" \
   --batch-size "${BATCH:-1}" \
   --grad-accum "${GRAD_ACCUM:-32}" \
-  --max-prompt-length "${MAX_PROMPT:-6144}" \
+  --max-prompt-length "${MAX_PROMPT:-4096}" \
   --max-completion-length "${MAX_COMPLETION:-256}" \
   --temperature "${TEMPERATURE:-1.0}" \
   --beta "${BETA:-0.04}" \
