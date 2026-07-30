@@ -80,8 +80,99 @@ def compatibility_matrix() -> dict[str, list[str]]:
     }
 
 
-def generate(n: int, *, seed: int = 0) -> list[Incident]:
-    """Generate `n` incidents spread across the four splits."""
+# Fraction of each decade of incidents assigned to a split. Fixed positions, not
+# proportions of `n`, so incident i's split never depends on how many were requested.
+_SPLIT_CYCLE = (("in_distribution",) * 7
+                + ("unseen_fault", "unseen_topology", "compositional"))
+
+
+def _split_at(i: int) -> str:
+    return _SPLIT_CYCLE[i % len(_SPLIT_CYCLE)]
+
+
+def _rank_within_split(i: int) -> int:
+    """How many incidents of i's split precede i. Deterministic in i alone."""
+    cycle, pos = divmod(i, len(_SPLIT_CYCLE))
+    split = _split_at(i)
+    per_cycle = _SPLIT_CYCLE.count(split)
+    before = sum(1 for j in range(pos) if _SPLIT_CYCLE[j] == split)
+    return cycle * per_cycle + before
+
+
+def generate(n: int, *, seed: int = 0, version: int = 2) -> list[Incident]:
+    """Generate `n` incidents spread across the four splits.
+
+    `version=2` is **prefix-stable**: `generate(N)[:M] == generate(M)` for every M <= N, so
+    the incident pool can grow without renaming a single existing incident. Version 1 was
+    not, because the split counts were `int(n * 0.70)` and friends, one global shuffle
+    reordered the whole plan, and per-incident seeds came off a shared stream in shuffled
+    order -- asking for more incidents changed every ID, which silently invalidates every
+    result computed against the old pool.
+
+    That mattered the day the evaluation needed more statistical power and could not get it
+    without discarding its own history. Version 1 is kept so existing published numbers stay
+    reproducible; nothing new should use it.
+    """
+    if version == 1:
+        return _generate_v1(n, seed=seed)
+    return _generate_v2(n, seed=seed)
+
+
+def _generate_v2(n: int, *, seed: int) -> list[Incident]:
+    """Each incident is a pure function of (seed, index), so prefixes are stable."""
+    matrix = compatibility_matrix()
+    train_topos = [t for t in matrix if t not in HELDOUT_TOPOLOGIES]
+    train_faults = {f.name for f in ALL_FAULTS} - HELDOUT_FAULTS
+
+    def pool(topos: list[str], faults: set[str]) -> list[tuple[str, str]]:
+        return sorted((t, f) for t in topos for f in matrix[t] if f in faults)
+
+    pools = {
+        "in_distribution": pool(train_topos, train_faults),
+        "unseen_fault": pool(train_topos, set(HELDOUT_FAULTS)),
+        "unseen_topology": pool(sorted(HELDOUT_TOPOLOGIES), train_faults),
+        "compositional": pool(train_topos, train_faults),
+    }
+
+    incidents: list[Incident] = []
+    for i in range(n):
+        split = _split_at(i)
+        combos = pools[split]
+        if not combos:
+            continue
+        topo, fault_name = combos[_rank_within_split(i) % len(combos)]
+        # Seeded on (seed, i) alone -- not drawn from a stream whose position depends on n.
+        rng = random.Random(f"{seed}:{i}")
+        s = rng.randrange(1, 2**31)
+        try:
+            _, fault, params = build(topo, fault_name, s)
+        except Exception:
+            continue
+        inc = Incident(
+            id=_incident_id(topo, fault_name, s),
+            topology=topo, fault=fault_name, seed=s, split=split,
+            difficulty=fault.difficulty, root_cause=fault.root_cause,
+            params=params,
+        )
+        if split == "compositional":
+            others = sorted(f for f in matrix[topo]
+                            if f != fault_name and f in {x.name for x in ALL_FAULTS})
+            for cand in rng.sample(others, k=min(len(others), 4)):
+                try:
+                    _, cfault, cparams = build(topo, cand, s + 1)
+                except Exception:
+                    continue
+                if cparams.get("service") and cparams.get("service") != params.get("service"):
+                    inc.secondary_fault = cand
+                    inc.secondary_params = cparams
+                    inc.difficulty = max(inc.difficulty, cfault.difficulty) + 1
+                    break
+        incidents.append(inc)
+    return incidents
+
+
+def _generate_v1(n: int, *, seed: int = 0) -> list[Incident]:
+    """The original generator. Kept only so published results stay reproducible."""
     rng = random.Random(seed)
     matrix = compatibility_matrix()
     train_topos = [t for t in matrix if t not in HELDOUT_TOPOLOGIES]

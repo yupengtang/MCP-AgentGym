@@ -169,3 +169,49 @@ def test_splits_are_disjoint_by_construction():
             assert inc.topology in generator.HELDOUT_TOPOLOGIES
         if inc.split == "in_distribution":
             assert inc.topology not in generator.HELDOUT_TOPOLOGIES
+
+
+def test_generator_v2_is_prefix_stable():
+    """generate(N)[:M] must equal generate(M), or the pool cannot grow.
+
+    Version 1 was not: split counts were int(n * 0.70), one global shuffle reordered the
+    plan, and per-incident seeds came off a shared stream in shuffled order. Asking for
+    more incidents renamed every existing one, so every result computed against the old
+    pool silently stopped being comparable. That is only discovered on the day more
+    statistical power is needed -- which is exactly the day it cannot be paid for.
+    """
+    big = generator.generate(600, seed=11)
+    for m in (50, 200, 450):
+        small = generator.generate(m, seed=11)
+        assert len(small) == len(big[:m])
+        for a, b in zip(small, big[:m], strict=True):
+            assert (a.id, a.split, a.fault, a.params) == (b.id, b.split, b.fault, b.params), \
+                f"incident {a.id} changed when the pool grew"
+
+
+def test_generator_v1_still_reproduces_the_published_pool():
+    """v1 is kept solely so published numbers stay reproducible; it must not drift."""
+    import json
+
+    from agentgym import config as cfg
+
+    path = cfg.DATA_DIR / "incidents.jsonl"
+    if not path.exists():
+        pytest.skip("no stored incident pool")
+    stored = [json.loads(line)["id"] for line in path.open()]
+    regenerated = [i.id for i in generator.generate(len(stored), seed=11, version=1)]
+    assert stored == regenerated, "v1 no longer reproduces the pool the results were run on"
+
+
+def test_generator_v2_keeps_the_splits_disjoint_at_any_size():
+    """Growing the pool must not leak a held-out family or topology into training."""
+    for n in (200, 1000):
+        inc = generator.generate(n, seed=11)
+        for i in inc:
+            if i.split == "in_distribution":
+                assert i.fault not in generator.HELDOUT_FAULTS
+                assert i.topology not in generator.HELDOUT_TOPOLOGIES
+            if i.split == "unseen_fault":
+                assert i.fault in generator.HELDOUT_FAULTS
+            if i.split == "unseen_topology":
+                assert i.topology in generator.HELDOUT_TOPOLOGIES

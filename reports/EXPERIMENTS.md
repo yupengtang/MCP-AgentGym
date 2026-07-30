@@ -673,10 +673,27 @@ DPO is ahead on **all four splits** (+5.5, +4.2, +5.0, +1.0), a sign test at p =
 Root cause just clears threshold; resolution does not. With a multiple-comparison
 correction across the metrics reported here, neither would.
 
-**The ceiling is structural.** Resolving the observed +4.3 pp at 80% power requires
-**n ≈ 2,119 per arm**; 601 is everything the four splits contain. So this is not a run to
-repeat with more compute — the incident pool would have to grow, and growing it changes the
-splits and breaks comparability with everything already published.
+**The ceiling was structural, and the reason turned out to be a defect.** Resolving the
+observed +4.3 pp at 80% power requires **n ≈ 2,119 per arm**; 601 is everything the four
+splits contained. Growing the pool looked impossible because it renamed every existing
+incident: `generate(5000)[:1200] != generate(1200)`, so every published result would have
+stopped being comparable.
+
+That is not a property of incident generation. It was three coupled choices in
+`generator.generate` — split counts computed as `int(n * 0.70)`, one global `rng.shuffle`
+over the whole plan, and per-incident seeds drawn from a shared stream in shuffled order.
+Each makes incident *i* depend on *n*.
+
+`version=2` makes every incident a pure function of `(seed, index)`: splits come from a
+fixed 7/1/1/1 position cycle rather than a proportion of `n`, and each incident seeds its
+own RNG on `f"{seed}:{i}"`. It is prefix-stable at every size tested, holds the splits at
+exactly 70/10/10/10, and leaks no held-out family or topology. `version=1` is retained and
+verified to still reproduce the stored 1,200 incidents byte-for-byte, so nothing already
+published moves.
+
+**The pool can now grow without discarding its own history.** An evaluation set that
+cannot be extended is only discovered to be broken on the day it needs more power, which is
+the day the cost of fixing it is highest.
 
 That gives the environment a stated resolution, which is more useful than a ranking:
 
