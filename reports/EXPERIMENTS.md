@@ -645,6 +645,39 @@ degrades capability, not that episode-level GRPO cannot work. The obvious next m
 smaller step size and a KL reference that constrains the *evaluation* distribution rather
 than the training one.
 
+### The contamination counter over-reported, and checking it was the only way to know
+
+The settle-timeout counter added earlier today fired on the high-power run, and the first
+reading looked alarming: 255 expiries across 6,600 episodes. Two things were wrong with
+that reading, and both were mine.
+
+**It was an event count, not an episode count.** One episode expires on several steps, so
+summing the field reads as a share of episodes when it is nothing of the kind. The true
+figure is **27 episodes, 0.4%**.
+
+**And those 27 are not contamination.** Every one involves `ResourceQuotaExhausted`, alone
+or in a compositional pair, and all 27 are unresolved. Inspecting one shows why: the agent
+never called `patch_resource_quota`, so the quota kept rejecting pod creation, so `_settle`
+waited for pods that could not exist and expired. The world genuinely cannot converge until
+the agent fixes the blocking fault. **Scoring the episode unresolved is correct, not
+corrupted** — the expiry is a symptom of the agent failing, not a cause of a wrong verdict.
+
+So the counter conflates two situations with opposite meanings:
+
+| expiry with... | means |
+|---|---|
+| episode **unresolved**, blocking fault outstanding | the agent did not fix it; the verdict is right |
+| episode **resolved** despite an expiry | the control plane really was slow; the verdict is suspect |
+
+Across all three arms, **every affected episode is in the first category** (14, 7 and 6,
+all unresolved). There is no measured contamination in this run at all.
+
+The instrument was built this morning to stop a silent failure and it immediately produced
+a loud false one. It now reports affected episodes rather than expiry events, and splits
+them by whether the episode resolved, because the count alone cannot distinguish "the
+machine was slow" from "the agent left the quota in place" — and those demand opposite
+responses.
+
 ### Resolved at full power: DPO improves diagnosis, not resolution
 
 The 5,000-incident prefix-stable pool lifted the ceiling from 601 to **2,200 per arm** on
