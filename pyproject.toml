@@ -22,9 +22,18 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-train = ["torch", "transformers", "peft", "trl", "bitsandbytes", "accelerate", "datasets", "mlflow"]
+# safetensors is imported directly by scripts/scale_adapter.py and train/episode_grpo.py.
+# It arrives transitively with transformers today, which is why its absence went unnoticed;
+# a transitive dependency you import directly is one upstream release away from breaking.
+train = ["torch", "transformers", "peft", "trl", "bitsandbytes", "accelerate", "datasets",
+         "mlflow", "safetensors"]
 serve = ["vllm"]
-dev = ["pytest", "pytest-asyncio", "anyio", "ruff"]
+# boto3 is a real runtime dependency of storage.S3Store, not a development convenience:
+# `pip install -e .` followed by AGENTGYM_ARTIFACT_URI=s3://... raised ImportError.
+cloud = ["boto3"]
+# moto is what makes test_storage.py runnable. Without it `pip install -e .[dev]` produced
+# a checkout whose own test suite could not pass.
+dev = ["pytest", "pytest-asyncio", "anyio", "ruff", "moto", "boto3"]
 
 [project.scripts]
 agentgym = "agentgym.cli:app"

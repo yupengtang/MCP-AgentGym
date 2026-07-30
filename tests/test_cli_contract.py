@@ -63,3 +63,39 @@ def test_build_datasets_refuses_to_overwrite(tmp_path):
     assert r.returncode != 0, "a populated output directory must not be silently replaced"
     assert "refusing to overwrite" in (r.stderr + r.stdout).lower()
     assert (out / "sft_train.jsonl").read_text() == before, "the file was modified anyway"
+
+
+def test_every_directly_imported_third_party_package_is_declared():
+    """An import the code makes must appear in pyproject, in some group.
+
+    Three did not: boto3 (storage.S3Store, declared nowhere, so `pip install -e .` gave a
+    checkout whose S3 path raised ImportError), moto (test_storage.py, so
+    `pip install -e .[dev]` gave one whose own tests could not run), and safetensors
+    (imported directly, present only transitively via transformers -- one upstream release
+    away from breaking).
+
+    Transitive availability is why all three went unnoticed: everything worked in the
+    environment that happened to exist, and would have failed for anyone installing fresh.
+    """
+    import re
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parents[1]
+    text = (root / "pyproject.toml").read_text()
+    declared = set(re.findall(r'"([A-Za-z0-9_.\-]+)"', text))
+
+    # Third-party packages this repository imports by name somewhere in its own source.
+    watched = {"boto3", "moto", "safetensors", "torch", "transformers", "peft", "trl",
+               "datasets", "mlflow", "pytest", "httpx", "jsonschema", "typer", "kubernetes"}
+    imported = set()
+    for path in list((root / "src").rglob("*.py")) + list((root / "tests").rglob("*.py")) \
+            + list((root / "scripts").rglob("*.py")):
+        body = path.read_text()
+        for name in watched:
+            if re.search(rf"^\s*(?:import|from)\s+{re.escape(name)}\b", body, re.M):
+                imported.add(name)
+
+    missing = sorted(imported - declared)
+    assert not missing, (
+        f"imported but not declared in pyproject.toml: {missing}. "
+        "They resolve today only because something else pulls them in.")
