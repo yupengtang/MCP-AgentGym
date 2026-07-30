@@ -139,9 +139,20 @@ Two things follow, and both matter for reading the model results:
 
 ## 6. Supervised fine-tuning
 
-**Setup.** Qwen3-8B, QLoRA (4-bit NF4, LoRA r=32, α=64, all attention and MLP
-projections), 614 curated demonstrations, 3 epochs, lr 1e-4 cosine, effective batch 8,
-8,192-token context, one L40S.
+**Setup, corrected.** This block described an SFT run that no published result uses. It
+said *614 demonstrations, 3 epochs*; the adapter every result actually derives from
+(`sft-qwen3-8b-v4`) trained on the **1,783-example** corpus for **2.0 epochs** — its
+`train_metrics.json` records `epoch: 2.0`, `train_loss 0.0918`, `eval_loss 0.0215`, and the
+corpus file predates the adapter by four hours.
+
+Current, verified: Qwen3-8B, QLoRA (4-bit NF4, LoRA r=32, α=64, all attention and MLP
+projections), **1,783 curated demonstrations, 2.0 epochs**, lr 1e-4 cosine, effective batch
+8, 8,192-token context, one L40S, 4 h 32 m.
+
+The stale figures survived because they were plausible and nothing recomputed them — the
+same failure as the serving numbers and the expert reference line. It matters more here:
+the epoch count is not a detail, it is the finding recorded below, since a 3-epoch SFT
+outperforms every variant post-trained on this 2-epoch base.
 
 **Loss masking.** Only assistant tokens contribute. Trajectories are dominated by long
 JSON tool outputs; training on those would teach the model to *generate* cluster state
@@ -154,7 +165,8 @@ unresolved, and the remainder capped so no fault family exceeds 18% of the set.
 Contamination check: **0 overlap** between the 646 training incidents and the 526
 evaluation incidents.
 
-**Result.** train_loss 0.110, eval_loss 0.034, token accuracy 98.9%.
+**Result.** `sft-qwen3-8b-v4`, the adapter behind every published row: train_loss 0.0918,
+eval_loss 0.0215. (The previously quoted 0.110 / 0.034 belonged to the superseded run.)
 
 **Reading it honestly.** An eval loss of 0.034 is *not* evidence of diagnostic skill. The
 expert is formulaic — a fixed investigation order per fault family — so a low loss mostly
