@@ -406,7 +406,7 @@ same L40S the serving numbers in the README were measured on, so those latencies
 | --- | --- |
 | `S3Store` boto3 call paths, key composition, pagination past 1,000 keys, missing-key errors | **Tested** against `moto`, which intercepts the AWS API inside botocore — the client code under test is real |
 | Path-traversal rejection, tree upload/download, URI scheme dispatch | **Tested** |
-| EKS overlay renders valid manifests with correct IRSA annotation and instance type | **Verified** via `helm lint` and `helm template` |
+| EKS overlay renders the objects it documents — IRSA annotation, instance type, and the gp3 `StorageClass` with late binding | **Verified** by `tests/test_helm_render.py`, which renders the chart with and without the overlay and asserts what each must and must not contain. `helm lint` alone was not enough: it passed for weeks while the `aws.storageClass` block in `values-eks.yaml` was consumed by no template and the StorageClass never rendered. Linting proves a chart is well-formed; only rendering proves it does anything. |
 | Behaviour against a live AWS account: IAM policy, bucket policy, network, EKS admission | **Not verified.** No deployment to real AWS has been performed. |
 
 The last row is the reason this section exists. A green test suite over `moto` proves the
