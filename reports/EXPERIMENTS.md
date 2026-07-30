@@ -657,6 +657,28 @@ degrades capability, not that episode-level GRPO cannot work. The obvious next m
 smaller step size and a KL reference that constrains the *evaluation* distribution rather
 than the training one.
 
+### A better base yields less preference signal
+
+Mining DPO pairs from the 3-epoch SFT, at settings identical to the 2-epoch run — 600
+incidents, 4 samples, temperature 0.9:
+
+| base | pairs | rejected: margin < 0.8 | rejected: no spread | mean margin |
+|---|---|---|---|---|
+| SFT 2 epochs | **437** | 157 | 6 | 2.594 |
+| SFT 3 epochs | **309** | **276** | 15 | 2.616 |
+
+Pair yield falls 29% because **76% more incidents fail the margin threshold**. The pairs
+that still form are no less informative — mean margin is unchanged at 2.62 — there are
+simply fewer of them, because a better policy's four attempts at one incident are more
+alike in quality and therefore harder to rank.
+
+This is the mechanism by which DPO's headroom shrinks as the base improves, measured
+rather than asserted, and it is visible before any evaluation of the resulting adapter.
+Earlier in this project the "policy too consistent to disagree with itself" hypothesis was
+raised for the 2-epoch base and **disproved** by these same counters — 73% pair rate, only
+one zero-spread incident. On the 3-epoch base the same instrument now supports it. The
+counters did not change; the policy did.
+
 ### The SFT baseline everything is measured against is undertrained
 
 A second SFT run, submitted to estimate seed variance, instead exposed something worse.
