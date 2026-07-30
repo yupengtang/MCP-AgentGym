@@ -657,6 +657,44 @@ degrades capability, not that episode-level GRPO cannot work. The obvious next m
 smaller step size and a KL reference that constrains the *evaluation* distribution rather
 than the training one.
 
+### One SFT epoch outweighs every post-training method tested
+
+Five complete arms at n = 2,200 on fresh incidents. `base` and `SFT 3ep + DPO` are still
+running; nothing below depends on them.
+
+| variant | in-dist | unseen fault | unseen topo | compositional | **all** | **root cause** | invalid |
+|---|---|---|---|---|---|---|---|
+| SFT 2 epochs — published baseline | 59.4% | 40.6% | 28.2% | 33.4% | 42.1% | 36.9% | 0.35% |
+| &nbsp;&nbsp;+ DPO-435 | 63.4% | 37.4% | 33.4% | 35.2% | 44.3% | 41.5% | 0.18% |
+| &nbsp;&nbsp;+ episode-GRPO | 62.7% | **43.6%** | 30.6% | 32.4% | 44.2% | 40.5% | 0.28% |
+| &nbsp;&nbsp;+ action-GRPO | 58.1% | 41.8% | 31.2% | 35.0% | 43.0% | 38.5% | 0.28% |
+| **SFT 3 epochs** | **67.9%** | 33.2% | **51.2%** | **41.8%** | **50.3%** | **50.6%** | 0.19% |
+
+Bonferroni threshold for the twenty comparisons reported is z > 2.64.
+
+```
+SFT 2ep -> SFT 3ep        +8.1 pp   z = 5.43   SIGNIFICANT
+SFT 2ep -> DPO-435        +2.1 pp   z = 1.43   not resolved
+SFT 2ep -> episode-GRPO   +2.0 pp   z = 1.37   not resolved
+SFT 2ep -> action-GRPO    +0.9 pp   z = 0.61   not resolved
+```
+
+**The only intervention with a detectable effect on resolution is an extra epoch of
+supervised training.** Three post-training methods, two of them on-policy RL against a
+verifiable reward, produce nothing this evaluation can distinguish from noise at n = 2,200.
+
+Action-level GRPO contributing least (+0.9 pp) is the outcome its own training metrics
+predicted: mean reward 3.22 against a 3.5 ceiling and **55% of groups with zero reward
+variance**, because SFT already parses, names real tools and satisfies the schema almost
+always. There was nearly nothing left in that objective to optimise, and the evaluation
+agrees.
+
+**The 3-epoch model is worse on held-out faults** — 33.2% against 40.6%. More supervised
+training buys in-distribution capability and pays for it in held-out coverage, which is the
+same specialization/generalization trade the attenuation sweep measured from the opposite
+direction: scaling the update *down* recovered held-out labels at some in-distribution
+cost, and training *longer* does the reverse. Two independent handles on one axis.
+
 ### DPO's one significant result does not survive a properly trained baseline
 
 In-distribution cell complete for all four arms, n = 700 each, fresh incidents. The other
