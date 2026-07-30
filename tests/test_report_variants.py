@@ -149,3 +149,51 @@ def test_readme_serving_numbers_match_the_stored_benchmark():
     assert f"{b['latency_p50_ms']:,.0f} ms" in readme, "p50-with does not match the artifact"
     assert f"{speedup:.1f}×" in readme, f"speedup {speedup:.1f}x is not the one quoted"
     assert re.search(rf"{tput:.0f}×\)", readme), f"throughput ratio {tput:.0f}x is not quoted"
+
+
+def test_readme_headline_table_matches_the_pool2_data():
+    """Every figure in the README's lead table must be recomputable from runs/eval-pool2/.
+
+    The serving benchmark, the expert reference line and the trajectory count all drifted
+    from their sources in this repository, each time because a number was transcribed once
+    and never recomputed. The lead table is the most-read set of numbers here, so it gets
+    the same treatment: recompute, then assert the string is present.
+    """
+    import os
+    from pathlib import Path
+
+    import pytest
+
+    runs = os.environ.get("AGENTGYM_RUNS")
+    pool = Path(runs) / "eval-pool2" if runs else None
+    if not pool or not pool.exists():
+        pytest.skip("pool2 evaluation not present")
+
+    from agentgym.data import trajectory as T
+
+    splits = ["in_distribution", "unseen_fault", "unseen_topology", "compositional"]
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text()
+
+    # (arm, splits quoted in the lead table, whether its overall + invalid are quoted)
+    quoted = {"base": True, "sft-p2": True, "dpo3ep-p2": True}
+    checked = 0
+    for arm, _ in quoted.items():
+        cells = {}
+        for sp in splits:
+            f = pool / f"{arm}-{sp}-clean.jsonl"
+            if not f.exists():
+                pytest.skip(f"{arm} incomplete")
+            cells[sp] = T.read_jsonl(f)
+        allts = [t for sp in splits for t in cells[sp]]
+        overall = sum(t.verification.resolved for t in allts) / len(allts)
+        assert f"{overall:.1%}" in readme, (
+            f"{arm} overall {overall:.1%} is not the figure quoted in README")
+        checked += 1
+        for sp in splits:
+            ts = cells[sp]
+            r = sum(t.verification.resolved for t in ts) / len(ts)
+            assert f"{r:.1%}" in readme, (
+                f"{arm}/{sp} is {r:.1%}; README does not contain that figure")
+            checked += 1
+
+    assert checked >= 15, "the guard checked suspiciously few figures"
