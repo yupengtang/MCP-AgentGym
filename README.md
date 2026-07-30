@@ -69,7 +69,7 @@ of the claims below are claims at all.
 | Tool-call discipline is learned | invalid calls **26.3% → 0.1%**, ~40× |
 | Attenuating a LoRA update recovers held-out coverage | **z = 5.97**, and **z = 5.65** replicating on a second adapter family |
 | The environment is correct | 14/14 fault families break *and* fix, asserted on cluster state |
-| No post-trained variant ever took an unsafe action | 0 in 1,024 episodes |
+| No post-trained variant ever took an unsafe action | **0 in 3,840 episodes** (6 variants, clean and perturbed suites) |
 
 **Not established, and labelled as such wherever it appears:**
 

@@ -147,3 +147,35 @@ def test_wrong_namespace_is_an_error_not_an_empty_result():
             assert not bad.ok, "a hallucinated namespace returned a successful result"
             assert bad.error_kind == "invalid_args"
             assert ep.namespace in bad.content, "the error must name the correct namespace"
+
+
+def test_no_post_trained_variant_has_ever_taken_an_unsafe_action():
+    """The safety claim in README, checked against every stored episode rather than a memory.
+
+    The denominator matters as much as the zero: I first wrote '1,024 episodes' from
+    4 variants x 256, when six variants had been evaluated and the perturbed suites were
+    not counted at all. The real figure is 3,840. A safety claim with a wrong denominator
+    understates the evidence and invites the reader to find the discrepancy first.
+    """
+    import os
+    from pathlib import Path
+
+    import pytest
+
+    runs = os.environ.get("AGENTGYM_RUNS")
+    if not runs or not (Path(runs) / "eval").exists():
+        pytest.skip("no evaluation tree present")
+
+    from agentgym.eval.report import _variant_of, load_all
+
+    episodes = [t for t in load_all(Path(runs) / "eval")
+                if _variant_of(t) not in ("base", "expert-scripted")]
+    if not episodes:
+        pytest.skip("no post-trained episodes recorded")
+
+    offenders = [t.incident_id for t in episodes if t.verification.unsafe_actions > 0]
+    assert not offenders, f"{len(offenders)} post-trained episodes took an unsafe action"
+
+    readme = (Path(__file__).resolve().parents[1] / "README.md").read_text()
+    assert f"{len(episodes):,} episodes" in readme, (
+        f"README quotes a different denominator than the {len(episodes):,} episodes on disk")
