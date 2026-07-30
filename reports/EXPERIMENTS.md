@@ -645,6 +645,59 @@ degrades capability, not that episode-level GRPO cannot work. The obvious next m
 smaller step size and a KL reference that constrains the *evaluation* distribution rather
 than the training one.
 
+### Resolved at full power: DPO improves diagnosis, not resolution
+
+The 5,000-incident prefix-stable pool lifted the ceiling from 601 to **2,200 per arm** on
+incidents no model has seen (zero id overlap with the v1 pool or the training set). Twelve
+cells, three arms:
+
+| variant | in-dist | unseen fault | unseen topo | compositional | **all (2,200)** | **root cause** | invalid | reward |
+|---|---|---|---|---|---|---|---|---|
+| SFT | 59.4% | 40.6% | 28.2% | 33.4% | 42.1% | 36.9% | 0.35% | 1.12 |
+| DPO-435 | **63.4%** | 37.4% | **33.4%** | **35.2%** | **44.3%** | **41.5%** | 0.18% | **1.21** |
+| episode-GRPO | 62.7% | **43.6%** | 30.6% | 32.4% | 44.2% | 40.5% | 0.28% | 1.20 |
+
+```
+resolution   SFT vs DPO-435   +2.1 pp   z = 1.43   not resolved
+             SFT vs GRPO      +2.0 pp   z = 1.37   not resolved
+             GRPO vs DPO-435  +0.1 pp   z = 0.06   not resolved
+
+root cause   SFT vs DPO-435   +4.6 pp   z = 3.15   significant, survives Bonferroni (z > 2.64, six comparisons)
+             SFT vs GRPO      +3.6 pp   z = 2.45   nominal only
+             GRPO vs DPO-435  +1.0 pp   z = 0.71   not resolved
+```
+
+**Preference optimisation measurably improves diagnostic accuracy over demonstrations
+alone. It does not measurably improve resolution rate.** DPO and episode-GRPO are
+indistinguishable from each other on every metric.
+
+### The two effects behaved oppositely as power grew, and that is the finding
+
+Both comparisons were run at four sizes. Watching them together separates a real effect
+from a lucky one better than any single number:
+
+| n per arm | resolution Δ | z | root-cause Δ | z |
+|---|---|---|---|---|
+| 256 | **+8.2 pp** | 1.86 | +3.4 pp | 0.79 |
+| 601 | +4.3 pp | 1.50 | +5.7 pp | 2.02 |
+| 700 | +4.0 pp | 1.50 | +7.9 pp | 3.02 |
+| **2,200** | **+2.1 pp** | 1.40 | **+4.6 pp** | **3.11** |
+
+The resolution effect **shrank monotonically toward zero** — 8.2 → 4.3 → 4.0 → 2.1 — while
+its z never moved off ~1.5. The root-cause effect wobbled between 3.4 and 7.9 but its **z
+climbed with every increase in n**, which is what a real effect does: the estimate is noisy,
+the evidence accumulates.
+
+The +8.2 pp that was once this project's headline was almost entirely winner's curse. It
+was never significance-tested when first reported, and four independent increases in power
+walked it down to +2.1 pp and left it there.
+
+**The general lesson, and the reason both rows are kept:** a real effect makes z grow with
+n; a noise effect makes the point estimate shrink while z stays flat. One project produced
+both, on the same runs, and only the sequence distinguishes them. A single well-powered
+measurement would have shown DPO's root-cause gain and missed the story about the
+resolution gain entirely.
+
 ### What this environment can and cannot measure
 
 The variant ranking was rerun at the maximum size the incident pool allows: 256

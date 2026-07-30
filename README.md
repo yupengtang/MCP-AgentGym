@@ -70,23 +70,19 @@ of the claims below are claims at all.
 | Attenuating a LoRA update recovers held-out coverage | **z = 5.97**, and **z = 5.65** replicating on a second adapter family |
 | The environment is correct | 14/14 fault families break *and* fix, asserted on cluster state |
 | No post-trained variant ever took an unsafe action | **0 in 3,840 episodes** (6 variants, clean and perturbed suites) |
+| Preference optimisation improves **diagnosis**, not resolution | root cause **+4.6 pp** SFT → DPO-435, **z = 3.15**, survives Bonferroni at n = 2,200/arm |
 
 **Not established, and labelled as such wherever it appears:**
 
-- **Which post-training method is best — and this evaluation cannot settle it.** Rerun at
-  `n = 601` per arm, the maximum the incident pool allows, DPO-435 beats SFT by **+4.3 pp
-  resolution (z = 1.49)** and **+5.7 pp root-cause accuracy (z = 1.99)**, ahead on all four
-  splits (sign test p = 0.0625). The direction is consistent; only root cause clears
-  threshold, and only barely. Resolving a 4.3 pp effect at 80% power needs **n ≈ 2,119
-  against a ceiling of 601** — so this is a *structural* limit of the current incident
-  pool, not a run that needs repeating. The honest claim is that DPO helps and the effect
-  is roughly half what a single run first suggested. At the same power, episode-GRPO
-  (49.4%) sits between them and is separable from neither — `SFT vs GRPO z = 0.98`,
-  `GRPO vs DPO z = 0.52`. **All three post-training methods occupy one 4.3 pp band this
-  evaluation cannot resolve**, while every one of them clears base (32.8%) decisively.
+- **Resolution rate does not separate the post-training methods.** Settled at
+  `n = 2,200` per arm on 5,000 fresh incidents no model has seen: SFT 42.1%, episode-GRPO
+  44.2%, DPO-435 44.3%, and every pairwise test unresolved (z = 1.43, 1.37, 0.06). The
+  gap did not merely fail to reach significance — it **shrank monotonically as power grew**,
+  from +8.2 pp at n = 256 to +2.1 pp at n = 2,200, with z pinned near 1.5 throughout. The
+  +8.2 pp that was once this README's headline was winner's curse.
+- **Anything about a second base model.** Everything here is Qwen3-8B.
 - **That preference-data volume matters.** Retracted — a replication at 437 pairs scored
   identically to the 88-pair run.
-- **Anything about a second base model.** Everything here is Qwen3-8B.
 
 Several results in this README were retracted after being published here, each because a
 measurement was wrong rather than because a model underperformed. The full chain — what was
