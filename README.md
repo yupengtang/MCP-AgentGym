@@ -56,6 +56,46 @@ on a second, independently-trained adapter family to within 1.6 pp** (SFT: 35.8%
 z = 5.65). One knob, applied at serving time, moves a model along the specialization axis
 after training has finished.
 
+## The complete table, and what dominates it
+
+All eight arms, `n = 2,200` each, on 5,000 incidents no model has seen. Bonferroni
+threshold for the 56 comparisons is z > 3.0.
+
+| variant | resolved | root cause | invalid calls |
+|---|---|---|---|
+| **SFT 2 epochs, seed 1 — no post-training** | **57.7%** | 48.9% | **0.01%** |
+| SFT 3 epochs + DPO-309 | 52.5% | **51.8%** | 0.32% |
+| SFT 3 epochs | 50.3% | 50.6% | 0.19% |
+| SFT 2 epochs + DPO-435 | 44.3% | 41.5% | 0.18% |
+| SFT 2 epochs + episode-GRPO | 44.2% | 40.5% | 0.28% |
+| SFT 2 epochs + action-GRPO | 43.0% | 38.5% | 0.28% |
+| SFT 2 epochs, seed A — the published baseline | 42.1% | 36.9% | 0.35% |
+| base, untrained | 36.3% | 37.6% | 26.32% |
+
+**The best agent here is a plain supervised fine-tune that happened to draw a different
+random seed.** It beats every post-trained variant, and has the cleanest tool use in the
+project at 0.01% invalid calls.
+
+Two clean single-variable comparisons explain the table:
+
+```
+SEED    two SFT runs, identical recipe    +15.6 pp   z = +10.48
+EPOCH   same seed, 2 epochs vs 3           -7.4 pp   z =  -4.94    a third epoch hurts
+```
+
+against every post-training method:
+
+```
++ DPO-435         +2.1 pp   z = 1.41    not resolved
++ episode-GRPO    +2.0 pp   z = 1.34    not resolved
++ action-GRPO     +0.9 pp   z = 0.60    not resolved
+```
+
+**The seed is seven times the largest method effect.** So is the (negative) epoch effect,
+at three and a half times. Even "how much does SFT help" is seed-dependent by a factor of
+3.6: base → SFT is +5.9 pp (z = 3.99) with one seed and +21.5 pp (z = 14.60) with another,
+same recipe, same data.
+
 ## What this project cannot tell you, and says so
 
 **Which post-training method is best.** Two SFT runs differing only in random seed are

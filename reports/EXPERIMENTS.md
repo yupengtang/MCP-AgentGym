@@ -657,6 +657,61 @@ degrades capability, not that episode-level GRPO cannot work. The obvious next m
 smaller step size and a KL reference that constrains the *evaluation* distribution rather
 than the training one.
 
+### Final: the complete grid, and the two variables that dominate it
+
+All eight arms complete, n = 2,200 each, on 5,000 incidents no model has seen.
+
+| variant | resolved | root cause | invalid calls | reward |
+|---|---|---|---|---|
+| **SFT 2ep, seed 1 — no post-training** | **57.7%** | 48.9% | **0.01%** | 1.54 |
+| SFT 3ep + DPO-309 | 52.5% | **51.8%** | 0.32% | 1.47 |
+| SFT 3ep | 50.3% | 50.6% | 0.19% | 1.40 |
+| SFT 2ep + DPO-435 | 44.3% | 41.5% | 0.18% | 1.21 |
+| SFT 2ep + episode-GRPO | 44.2% | 40.5% | 0.28% | 1.20 |
+| SFT 2ep + action-GRPO | 43.0% | 38.5% | 0.28% | 1.15 |
+| SFT 2ep, seed A — published baseline | 42.1% | 36.9% | 0.35% | 1.12 |
+| base | 36.3% | 37.6% | 26.32% | 0.15 |
+
+Two single-variable comparisons account for the ordering:
+
+```
+SEED    identical recipe, different seed   +15.6 pp   z = +10.48
+EPOCH   same seed, 2 epochs vs 3            -7.4 pp   z =  -4.94
+```
+
+against the three post-training methods, none of which resolves:
+
+```
++ DPO-435  +2.1 pp (z=1.41)   + episode-GRPO  +2.0 pp (z=1.34)   + action-GRPO  +0.9 pp (z=0.60)
+```
+
+**The seed is 7× the largest method effect; the epoch effect is 3.5× it and negative.** The
+best agent in the project is a plain supervised fine-tune with a lucky seed, and it also has
+the cleanest tool use here — 0.01% invalid calls against 0.18–0.35% for everything
+post-trained.
+
+Even the headline "post-training clears base" is seed-dependent by a factor of 3.6: the
+same SFT recipe gives +5.9 pp (z = 3.99) with one seed and +21.5 pp (z = 14.60) with
+another. It clears base either way — every arm does, at z = 3.99 to 14.60 — but the
+magnitude anyone would quote is mostly a draw.
+
+**What this means for the project's claims.** Three survive:
+
+1. **Post-training clears the untrained base**, on every arm, at z ≥ 3.99.
+2. **It collapses invalid tool calls** from 26.3% to 0.01–0.35%, a ~100× effect no seed
+   draw comes near.
+3. **It trades away held-out coverage**: base is the *best* model here on fault families it
+   never saw (65.8% against 33–53%), and the label-prior mechanism behind that is
+   measured, reversible at serving time, and replicated across two adapter families at
+   z ≈ 6.
+
+One does not: **any ordering among SFT, DPO, episode-GRPO and action-GRPO.** All four sit
+inside the spread a single recipe produces by reseeding.
+
+The honest one-line summary of the post-training work: *it reliably teaches the tool
+protocol and reliably narrows the model; which algorithm you use to do it was not
+measurable here, and the run-to-run draw mattered more than the algorithm.*
+
 ### RETRACTED — the epoch effect was seed variance, and seed variance dominates everything
 
 **The section below is wrong and is kept for the record.** It reported that an extra SFT
