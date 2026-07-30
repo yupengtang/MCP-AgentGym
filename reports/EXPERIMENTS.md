@@ -657,6 +657,63 @@ degrades capability, not that episode-level GRPO cannot work. The obvious next m
 smaller step size and a KL reference that constrains the *evaluation* distribution rather
 than the training one.
 
+### RETRACTED — the epoch effect was seed variance, and seed variance dominates everything
+
+**The section below is wrong and is kept for the record.** It reported that an extra SFT
+epoch outweighs every post-training method (+8.1 pp, z = 5.43). That comparison held the
+epoch count apart from the *seed*, and the two runs differed in both.
+
+Training a third SFT adapter — 2 epochs at the **same seed** as the 3-epoch run — separates
+them. In-distribution, n = 700 per arm:
+
+| run | epochs | seed | resolution | root cause |
+|---|---|---|---|---|
+| `v4` (published baseline) | 2 | A | 59.4% | 59.0% |
+| `sft-2ep-seed1` | 2 | 1 | **72.0%** | **70.0%** |
+| `sft-...-seed2` | 3 | 1 | 67.9% | 68.0% |
+
+```
+SEED  only (both 2 epochs, different seed):  +12.6 pp   z = +5.00   SIGNIFICANT
+EPOCH only (both seed 1, 2 vs 3 epochs):      −4.1 pp   z = −1.69   negative
+```
+
+**The epoch effect is slightly negative. The +8.1 pp was the seed.**
+
+And that is the finding, larger than anything else this project measured:
+
+| comparison | Δ | z | kind |
+|---|---|---|---|
+| **SFT seed A → SFT seed B, identical recipe** | **+12.6 pp** | **5.00** | **seed** |
+| SFT 2ep → 3ep, same seed | −4.1 pp | −1.69 | epoch |
+| SFT → + DPO-435 | +4.0 pp | 1.54 | method |
+| SFT 3ep → + DPO-309 | +3.4 pp | 1.40 | method |
+| SFT → + episode-GRPO | +3.3 pp | 1.26 | method |
+| SFT → + action-GRPO | −1.3 pp | −0.50 | method |
+
+**Two SFT runs differing only in random seed are 12.6 pp apart — three times the largest
+method effect, and the only comparison in the table that clears significance.**
+
+The consequence is unavoidable: **no single-run method comparison in this project is
+interpretable.** DPO, episode-GRPO and action-GRPO were each trained once. Their measured
+differences from the baseline, and from each other, sit entirely inside the distribution
+that one recipe produces by reseeding. Establishing that any of them helps requires several
+seeds per arm and a comparison of distributions, which this project has not done.
+
+This is the third time these numbers have been revised, each time downward and each time
+because power increased or a confound was removed: +8.2 pp from DPO became +2.1 pp under
+power; the residual was reattributed to a missing epoch; the epoch turns out to be seed.
+The direction of travel is itself informative — **every increase in rigour has moved the
+result toward "no measurable difference", which is what a null looks like when it is
+approached honestly.**
+
+What survives untouched: the environment's correctness, the base-to-post-trained gain, the
+collapse of invalid tool calls from 26.3% to ~0.2%, and the label-prior finding — which was
+never a single-run comparison. It is a dose-response across four attenuation levels,
+replicated on two independently-trained adapters, at z ≈ 6. That design is why it survives
+and the method comparisons do not.
+
+<details><summary>The retracted section, unedited</summary>
+
 ### One SFT epoch outweighs every post-training method tested
 
 Five complete arms at n = 2,200 on fresh incidents. `base` and `SFT 3ep + DPO` are still
@@ -694,6 +751,8 @@ training buys in-distribution capability and pays for it in held-out coverage, w
 same specialization/generalization trade the attenuation sweep measured from the opposite
 direction: scaling the update *down* recovered held-out labels at some in-distribution
 cost, and training *longer* does the reverse. Two independent handles on one axis.
+
+</details>
 
 ### DPO's one significant result does not survive a properly trained baseline
 

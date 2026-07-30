@@ -38,19 +38,32 @@ cost** — and it **replicates on a second, independently-trained adapter family
 1.6 pp** (SFT: 35.8% → 70.0%, z = 5.65). One mechanism, two policies trained by different
 objectives, same recovery.
 
-**2. An extra epoch of supervised training outweighs every post-training method here.**
+**2. The training seed moves the result more than any method does — so most of this
+project's method comparisons are not interpretable, and it says so.**
 
-| intervention on the published baseline | resolution | z |
+Two SFT runs, identical hyperparameters and data, differing only in random seed:
+
+| comparison | Δ resolution | z |
 |---|---|---|
-| + DPO (435 pairs) | +2.1 pp | 1.43 |
-| + episode-level GRPO | +2.0 pp | 1.37 |
-| + action-level GRPO | +0.9 pp | 0.61 |
-| **+ one more SFT epoch** | **+8.1 pp** | **5.43** |
+| **SFT seed A → SFT seed B, same recipe** | **+12.6 pp** | **5.00** |
+| SFT 2 epochs → 3 epochs, same seed | −4.1 pp | −1.69 |
+| SFT → + DPO (435 pairs) | +4.0 pp | 1.54 |
+| SFT → + episode-level GRPO | +3.3 pp | 1.26 |
+| SFT → + action-level GRPO | −1.3 pp | −0.50 |
 
-At `n = 2,200` per arm on incidents no model has seen, the only detectable effect is the
-epoch. This was found by running the baseline that is easy not to run — and it cost this
-project its headline: the originally reported "+8.2 pp from DPO" was measured against a
-baseline with an epoch of training left in it, and shrank to +2.1 pp under power.
+**The seed is three times the largest method effect and the only row that clears
+significance.** DPO and both GRPO variants were each trained once, so their measured gains
+sit inside the spread one recipe produces by reseeding. Claiming any of them helps needs
+several seeds per arm; this project has not done that, and does not claim it.
+
+Getting here took three revisions, each downward, each after removing a confound or adding
+power: DPO's "+8.2 pp" became +2.1 pp under power, the residual was reattributed to a
+missing training epoch, and the epoch turned out to be the seed. **Every increase in rigour
+moved the answer toward "no measurable difference"** — which is what a null looks like when
+you approach it honestly rather than stopping at the first flattering number.
+
+Finding 1 survives all of this because it was never a single-run comparison: a
+dose-response across four levels, replicated on two independently-trained adapters, z ≈ 6.
 
 **Why believe any of it.** Because the same discipline that produced these also retracted
 four of this project's earlier claims, and every retraction is in
