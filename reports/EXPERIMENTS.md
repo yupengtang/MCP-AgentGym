@@ -92,13 +92,13 @@ a scripted policy throughout — never as a model.
 
 | variant | n | resolution | root cause | unsafe | invalid calls | tool calls | reward |
 |---|---|---|---|---|---|---|---|
-| expert-scripted | 1,452 | 90.4% | 100.0% | 0.0% | 0.0% | 7.5 | 2.60 |
+| expert-scripted | 4,010 | 91.4% | 100.0% | 0.0% | 0.0% | 8.0 | 2.60 |
 
 ### 5.1 By split
 
 | split | resolution |
 |---|---|
-| in-distribution | 95.7% |
+| in-distribution | 92.9% |
 | unseen fault | 97.8% |
 | unseen topology | 95.0% |
 | **compositional** | **50.8%** |
