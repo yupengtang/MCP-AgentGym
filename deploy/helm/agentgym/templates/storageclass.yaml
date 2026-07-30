@@ -1,0 +1,37 @@
+{{- /*
+The gp3 StorageClass the EKS overlay describes.
+
+values-eks.yaml has carried an `aws.storageClass` block -- name, provisioner, parameters --
+since the overlay was written, and DESIGN.md §9b claims a gp3 StorageClass backs the
+datastore StatefulSets. No template consumed it, so `helm template -f values-eks.yaml`
+rendered ServiceAccount, RBAC, Deployments, Service, HPA and NetworkPolicy, and no
+StorageClass at all. `helm lint` passed throughout, because unused values are legal.
+
+Guarded on `create` so the default values -- which have no `aws` block -- render nothing,
+and an operator who already manages storage classes cluster-wide can turn it off.
+*/ -}}
+{{- with .Values.aws }}
+{{- if and .storageClass .storageClass.create }}
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: {{ .storageClass.name | default "gp3" }}
+  labels:
+    app.kubernetes.io/name: {{ include "agentgym.name" $ }}
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/managed-by: {{ $.Release.Service }}
+provisioner: {{ .storageClass.provisioner | default "ebs.csi.aws.com" }}
+{{- /* WaitForFirstConsumer, not Immediate: an incident namespace's PVC must bind in the
+       zone where its pod is actually scheduled, or a multi-AZ node group produces pods
+       that can never mount their volume. */}}
+volumeBindingMode: {{ .storageClass.volumeBindingMode | default "WaitForFirstConsumer" }}
+allowVolumeExpansion: {{ .storageClass.allowVolumeExpansion | default true }}
+reclaimPolicy: {{ .storageClass.reclaimPolicy | default "Delete" }}
+{{- with .storageClass.parameters }}
+parameters:
+{{- range $k, $v := . }}
+  {{ $k }}: {{ $v | quote }}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
