@@ -1,5 +1,5 @@
 MCP-AgentGym — SESSION HANDOFF
-Last updated: 2026-07-30, after commit e8acf39
+Last updated: 2026-07-30, after commit 0708f83 (+ this cycle's submissions)
 ================================================================================
 
 HOW TO READ THIS FILE
@@ -172,15 +172,30 @@ A SECOND SUBTLETY WORTH KEEPING:
 ================================================================================
 6. JOBS IN FLIGHT
 ================================================================================
-  5557437  p2-dpos2       DPO-on-seed2 evaluation -> completes the paired test
-  5557438  p2-rseed11     first genuinely-different-seed SFT evaluation
-  5557058  sft-realseed12 training (real seed 12)
-  5557059  sft-lr5e5      LR 5e-5 control on the CURRENT corpus, so the LR
-                          comparison is not confounded by v4's unknown provenance
+  5557437  p2-dpos2     2/4  DPO-on-seed2 eval -> LR-matched pair 2
+  5557438  p2-rseed11   2/4  seed-11 SFT eval
+  5557588  p2-rseed12   queued  seed-12 SFT eval
+  5557589  p2-lr5e5     queued  LR 5e-5 control eval
 
-  WHEN 5557437 LANDS: compute the paired DPO test, sign test, paired t. Write to
-  README + EXPERIMENTS. If the pairs disagree in direction, say so — that is a
-  result, not a failure.
+  TRAINING NOW DONE — all four adapters exist and are verified:
+    sft-2ep-realseed11  seed 11, LR 1e-4, epoch 2.0, train_loss 0.072827
+    sft-2ep-realseed12  seed 12, LR 1e-4, epoch 2.0, train_loss 0.072444
+    sft-2ep-lr5e5       seed  0, LR 5e-5, epoch 2.0, train_loss 0.091999
+    sft-2ep-seed1       seed  0, LR 1e-4, epoch 2.0, train_loss 0.072774
+
+  THE LR ATTRIBUTION IS NOW CONFIRMED AT TRAINING TIME. Rebuilding v4's learning
+  rate on the CURRENT corpus gives train_loss 0.091999 against v4's 0.091755 — a
+  difference of 0.00024. Three runs at LR 1e-4 with seeds 0, 11 and 12 cluster at
+  0.0724-0.0728. The learning rate accounts for the whole gap; nothing else about
+  v4's provenance was special, and the seed moves training loss by <0.0004.
+
+  WHAT EACH PENDING EVAL SETTLES:
+    5557437 -> LR-matched pair 2. With pair 1 (+4.2pp, z=2.83) this gives two
+               pairs. TWO IS NOT ENOUGH FOR A SIGN TEST — report direction
+               agreement, do not imply more evidence than exists.
+    5557438 + 5557588 -> realseed11 vs realseed12: the FIRST genuine seed
+               comparison in this project's history.
+    5557589 -> lr5e5 vs seed1: a clean LR comparison, one corpus, one seed.
 
 
 ================================================================================
