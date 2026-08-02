@@ -64,9 +64,9 @@ SURVIVES SCRUTINY
     process layer (healthy, OOMKilled, BadConfigMap, ReadinessProbeMisconfig,
     CascadingDependencyDown), agreeing on BOTH readiness and reason.
 
-RESOLVED THIS CYCLE — the LR-matched paired DPO test, and it is a negative
----------------------------------------------------------------------------
-(i) Two pairs, both bases at seed 0 / LR 1e-4 / same corpus, scoring 57.7% and
+RESOLVED — the LR-matched paired DPO test, and it is a negative
+-----------------------------------------------------------------
+(j) Two pairs, both bases at seed 0 / LR 1e-4 / same corpus, scoring 57.7% and
     57.5% — 0.2pp apart, i.e. indistinguishable at the floor:
 
       pair 1:  57.73% -> 61.91%   +4.18pp (z=+2.83)  root +5.41pp (z=+3.60)
@@ -88,8 +88,10 @@ RESOLVED THIS CYCLE — the LR-matched paired DPO test, and it is a negative
 
 NOT SHOWN, AND THE README SAYS SO
 ----------------------------------
-  - Any ordering among SFT / DPO / episode-GRPO / action-GRPO from the ORIGINAL
-    (LR-mismatched) comparison. May change once the LR-matched pairs finish.
+  - Any ordering among SFT / DPO / episode-GRPO / action-GRPO. The original
+    comparison was LR-mismatched; the LR-matched replacement has since been run and
+    came out a negative (the two pairs disagree). Both reasons stand, and neither is
+    waiting on further data.
   - Anything about a second base model. Everything is Qwen3-8B.
   - Live AWS behaviour. Needs the user to run scripts/verify_aws.py.
 
@@ -134,8 +136,11 @@ WHAT REPLACED IT:
   - The dominant controllable factor is the learning rate, and the published
     baseline trained at HALF the better one. Every method comparison in the docs
     was measured against an undertuned reference.
-  - The true floor, measured for the first time: 0.2pp at n=2,200.
-  - Method effects of 2-5pp are 10-25x the floor => READABLE.
+  - A floor, measured for the first time: 0.2pp at n=2,200 — but see (f) above, this
+    is the SAME-CONFIGURATION floor and was briefly misread as the general one. The
+    floor that governs method comparisons is 3.1pp (seed 11 vs seed 12).
+  - Method effects of 2-5pp are therefore roughly the SAME SIZE as the seed floor,
+    not comfortably above it. That is why the paired DPO test came out a negative.
 
 ALSO FOUND: train_dpo.sbatch never passed --lr either. DPO's learning rate was
   always the trainer default; exporting LR did nothing.
