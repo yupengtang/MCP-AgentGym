@@ -79,6 +79,7 @@ python -m agentgym.train.grpo_train \
   --max-completion-length "${MAX_COMPLETION:-256}" \
   --temperature "${TEMPERATURE:-1.0}" \
   --beta "${BETA:-0.04}" \
-  --max-prompts "${MAX_PROMPTS:-2000}"
+  --max-prompts "${MAX_PROMPTS:-2000}" \
+  --seed "${SEED:-0}"
 
 echo "action-level GRPO complete -> $OUT"

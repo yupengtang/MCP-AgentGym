@@ -25,12 +25,25 @@ mkdir -p "$OUT"
 
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 
+# Every knob this launcher accepts, echoed before the run. SEED was exported by three
+# separate jobs and forwarded by none of them -- the trainer has --seed and uses it, this
+# script simply never passed it, so all three "different seeds" trained at seed 0. The
+# resulting 15.6pp gap was published as seed variance and was actually a learning-rate
+# difference (5e-5 vs 1e-4). An env var nobody reads is indistinguishable from one that
+# does nothing, so the effective configuration is now printed where the log will show it.
+echo "--- effective SFT configuration ---"
+for kv in "EPOCHS=${EPOCHS:-3}" "LR=${LR:-1e-4}" "SEED=${SEED:-0}" \
+          "GRAD_ACCUM=${GRAD_ACCUM:-8}" "MAX_LEN=${MAX_LEN:-8192}" "LORA_R=${LORA_R:-32}"; do
+  echo "  $kv"
+done
+
 python -m agentgym.train.sft_train \
   --train-file "$AGENTGYM_DATA/sft/sft_train.jsonl" \
   --eval-file  "$AGENTGYM_DATA/sft/sft_val.jsonl" \
   --output-dir "$OUT" \
   --epochs "${EPOCHS:-3}" \
   --lr "${LR:-1e-4}" \
+  --seed "${SEED:-0}" \
   --grad-accum "${GRAD_ACCUM:-8}" \
   --max-length "${MAX_LEN:-8192}" \
   --lora-r "${LORA_R:-32}" \

@@ -135,7 +135,9 @@ python -m agentgym.train.dpo_train \
   --sft-adapter "$ADAPTER" \
   --output-dir "$OUT" \
   --epochs "${EPOCHS:-1}" \
+  --lr "${LR:-5e-6}" \
   --beta "${BETA:-0.1}" \
-  --run-name dpo-qwen3-8b
+  --run-name dpo-qwen3-8b \
+  --seed "${SEED:-0}"
 
 echo "DPO complete -> $OUT"
