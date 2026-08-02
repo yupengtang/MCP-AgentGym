@@ -50,14 +50,27 @@ SURVIVES SCRUTINY
     process layer (healthy, OOMKilled, BadConfigMap, ReadinessProbeMisconfig,
     CascadingDependencyDown), agreeing on BOTH readiness and reason.
 
-PROVISIONAL — one LR-matched pair complete, the second running
----------------------------------------------------------------
-(i) DPO on an LR-MATCHED baseline: +4.2pp resolution (z=2.83), +5.4pp root cause
-    (z=3.60). The published comparison, against an undertuned baseline, gave only
-    +2.1pp (z=1.43) — so the undertuned reference UNDERSTATED DPO.
-    DO NOT headline this until pair 2 (dpos2-p2, job 5557437) lands. And when it
-    does: two pairs support "both agree in direction", not a sign test. There is
-    no p-value to quote from two observations.
+RESOLVED THIS CYCLE — the LR-matched paired DPO test, and it is a negative
+---------------------------------------------------------------------------
+(i) Two pairs, both bases at seed 0 / LR 1e-4 / same corpus, scoring 57.7% and
+    57.5% — 0.2pp apart, i.e. indistinguishable at the floor:
+
+      pair 1:  57.73% -> 61.91%   +4.18pp (z=+2.83)  root +5.41pp (z=+3.60)
+      pair 2:  57.55% -> 57.27%   -0.27pp (z=-0.18)  root +0.05pp (z=+0.03)
+
+    THEY DISAGREE. Not evaluation noise — the floor is 0.2pp and pair 1's effect is
+    twenty times that. The variability is in TRAINING: the same recipe on two
+    indistinguishable baselines gives a large gain once and nothing the other time.
+
+    SAY: DPO can help, by a margin well above the floor.
+    DO NOT SAY: any specific number. A single DPO run's gain is a property of that
+    run, not of the method, and both outcomes have now been observed.
+    Two observations support neither a sign test nor a p-value. Do not quote one.
+
+    NEAR MISS WORTH KEEPING: pair 1 was complete for a full cycle before pair 2
+    finished. Written up then it would have read "DPO delivers +4.2pp (z=2.83) once
+    the LR is matched" — every number correct, the sentence wrong. Fifth time a
+    first cell pointed somewhere the full grid did not.
 
 NOT SHOWN, AND THE README SAYS SO
 ----------------------------------

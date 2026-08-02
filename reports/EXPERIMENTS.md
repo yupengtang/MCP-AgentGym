@@ -657,6 +657,46 @@ degrades capability, not that episode-level GRPO cannot work. The obvious next m
 smaller step size and a KL reference that constrains the *evaluation* distribution rather
 than the training one.
 
+### DPO's benefit does not replicate across two indistinguishable baselines
+
+With the learning rate matched and the floor known, the question "does DPO help" could
+finally be asked properly: train DPO from a specific SFT and compare it against *that* SFT,
+so nothing about the baseline differs.
+
+Two pairs. Both SFT bases have identical configuration — seed 0, LR 1e-4, same corpus, 2
+epochs — and score **57.7% and 57.5%**, 0.2 pp apart, which is the measured floor. They are
+behaviourally indistinguishable.
+
+| | base | + DPO | Δ resolution | z | Δ root cause | z |
+|---|---|---|---|---|---|---|
+| **pair 1** | 57.73% | 61.91% | **+4.18 pp** | **+2.83** | **+5.41 pp** | **+3.60** |
+| **pair 2** | 57.55% | 57.27% | **−0.27 pp** | −0.18 | **+0.05 pp** | +0.03 |
+
+**They disagree.** On one base DPO gives +4.2 pp resolution and +5.4 pp root cause, both
+clearing significance. On the other it gives nothing — −0.27 pp and +0.05 pp, indexes
+indistinguishable from zero.
+
+This is not evaluation noise. The evaluation floor is 0.2 pp at n = 2,200, and pair 1's
+effect is twenty times that. **The variability is in the training, not the measurement**:
+the same DPO recipe, applied to two baselines that score within a fifth of a point of each
+other, produces a large gain in one case and nothing in the other.
+
+**What this permits saying:** DPO *can* help, by a margin well above the measurement floor.
+**What it forbids:** quoting a number. A single DPO run's improvement is not a property of
+the method here — it is a property of that run, and this project has now observed both
+outcomes from nominally identical starting points.
+
+Two pairs support a statement about direction agreement, and the directions **do not**
+agree. Two observations also cannot support a sign test; there is no p-value to quote from
+them, and one is not offered.
+
+**Note what was avoided.** Pair 1 alone was complete for one cycle before pair 2 finished.
+Written up then, it would have read: *"with the learning rate matched, DPO delivers +4.2 pp
+resolution (z = 2.83) and +5.4 pp root cause (z = 3.60) — the undertuned baseline had been
+understating it."* Every number in that sentence is correct. The sentence is wrong. It is
+the fifth time in this project that a first cell has pointed somewhere the full grid did
+not, and the reason the report script refuses to render a partial grid.
+
 ### The run-to-run floor is 0.2 pp, not 15.6 pp — and it makes the method effects readable
 
 With the launcher fixed, the floor could finally be measured. Two SFT runs with **identical

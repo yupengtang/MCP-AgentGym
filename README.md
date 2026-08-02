@@ -106,10 +106,26 @@ in flight — so the real run-to-run floor is, as of now, **unmeasured**.
 
 ## What this project cannot tell you, and says so
 
-**Which post-training method is best.** Not because of seed noise — that was a
-misattribution, corrected above — but because the reference they were measured against was
-trained at half the better learning rate, and because the true seed-to-seed floor has never
-been measured in this project. The comparison table as it stands:
+**Whether DPO helps, as a number.** With the learning rate matched and the run-to-run
+floor measured at 0.2 pp, the question was asked properly — train DPO from a specific SFT,
+compare against *that* SFT. Two pairs, both baselines identically configured and scoring
+57.7% and 57.5%:
+
+| | Δ resolution | z | Δ root cause | z |
+|---|---|---|---|---|
+| pair 1 | **+4.18 pp** | +2.83 | **+5.41 pp** | +3.60 |
+| pair 2 | −0.27 pp | −0.18 | +0.05 pp | +0.03 |
+
+**They disagree, and it is not evaluation noise** — the floor is 0.2 pp and pair 1's effect
+is twenty times it. The same recipe on two indistinguishable baselines gives a large gain
+once and nothing the other time, so **the variability is in training, not measurement.**
+DPO *can* help by a wide margin; what cannot be quoted is a number, because a single run's
+gain turns out to be a property of that run. Two pairs also cannot support a sign test, and
+none is offered.
+
+**The ordering among methods**, for the same reason plus one more: every published method
+comparison was measured against a baseline trained at half the better learning rate. The
+table as it stands:
 
 | comparison | Δ resolution | z |
 |---|---|---|
