@@ -50,12 +50,14 @@ SURVIVES SCRUTINY
     process layer (healthy, OOMKilled, BadConfigMap, ReadinessProbeMisconfig,
     CascadingDependencyDown), agreeing on BOTH readiness and reason.
 
-PROVISIONAL — one pair complete, second pair running
------------------------------------------------------
+PROVISIONAL — one LR-matched pair complete, the second running
+---------------------------------------------------------------
 (i) DPO on an LR-MATCHED baseline: +4.2pp resolution (z=2.83), +5.4pp root cause
     (z=3.60). The published comparison, against an undertuned baseline, gave only
     +2.1pp (z=1.43) — so the undertuned reference UNDERSTATED DPO.
-    DO NOT write this as a headline until pair 3 (dpos2-p2, job 5557437) lands.
+    DO NOT headline this until pair 2 (dpos2-p2, job 5557437) lands. And when it
+    does: two pairs support "both agree in direction", not a sign test. There is
+    no p-value to quote from two observations.
 
 NOT SHOWN, AND THE README SAYS SO
 ----------------------------------
