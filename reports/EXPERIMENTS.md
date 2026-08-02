@@ -657,6 +657,49 @@ degrades capability, not that episode-level GRPO cannot work. The obvious next m
 smaller step size and a KL reference that constrains the *evaluation* distribution rather
 than the training one.
 
+### The variance budget, decomposed — and a correction to the floor I reported
+
+Every source of variation this project can now measure, all at n = 2,200 per arm on the
+same 5,000 fresh incidents:
+
+| source | Δ resolution | z |
+|---|---|---|
+| **learning rate, 5e-5 → 1e-4** | **+14.23 pp** | **+9.54** |
+| DPO, pair 1 | +4.18 pp | +2.83 |
+| **training seed, 11 → 12** | **−3.09 pp** | **−2.06** |
+| DPO, pair 2 | −0.27 pp | −0.18 |
+| nondeterminism, *same* seed | −0.18 pp | −0.12 |
+
+**A correction.** Earlier in this session the run-to-run floor was reported as 0.2 pp, and
+the conclusion drawn was that 2–5 pp method effects are ten to twenty-five times the floor
+and therefore readable. **That floor is the wrong one for the comparison being made.** It
+was measured between two runs at the *same* seed, so it captures GPU nondeterminism only.
+
+Two genuinely different seeds — the first such comparison in this project, possible only
+after the launcher was fixed — differ by **3.1 pp (z = −2.06)**. Sixteen times the
+same-seed figure, and nominally significant.
+
+Which floor applies depends on the question:
+
+* Comparing two runs of the *same* configuration: **0.2 pp**.
+* Comparing independently trained models, which is what every method comparison does:
+  **3.1 pp**.
+
+**And 3.1 pp is the same size as DPO's effect** — +4.18 pp in one pair, −0.27 pp in the
+other. That is not a coincidence; it is the explanation. The pairs disagreed because the
+quantity being measured is comparable to the noise in what it is measured against.
+
+So the original conclusion — that method comparisons here need several seeds per arm — was
+**right, and this session first refuted it for a bad reason and then restored it for a good
+one**. The refutation used the same-seed floor, which understates the relevant noise by a
+factor of sixteen.
+
+**The learning rate remains dominant and is now clean.** 5e-5 against 1e-4, same seed, same
+corpus, same epochs: +14.23 pp resolution (z = 9.54), +10.41 pp root cause (z = 7.00), and
+invalid calls 0.59% → 0.01%. It is 4.6× the seed floor and the only factor measured here
+that clearly rises above it. **Tuning the learning rate mattered more than every
+post-training method tested, and by a margin nothing else approaches.**
+
 ### DPO's benefit does not replicate across two indistinguishable baselines
 
 With the learning rate matched and the floor known, the question "does DPO help" could

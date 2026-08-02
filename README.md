@@ -56,6 +56,35 @@ on a second, independently-trained adapter family to within 1.6 pp** (SFT: 35.8%
 z = 5.65). One knob, applied at serving time, moves a model along the specialization axis
 after training has finished.
 
+## What actually moves the number: a measured variance budget
+
+Every source of variation this project can measure, all at `n = 2,200` per arm on 5,000
+incidents no model has seen:
+
+| source | Δ resolution | z |
+|---|---|---|
+| **learning rate, 5e-5 → 1e-4** | **+14.23 pp** | **+9.54** |
+| DPO on baseline A | +4.18 pp | +2.83 |
+| **training seed, 11 → 12** | **−3.09 pp** | **−2.06** |
+| DPO on baseline B | −0.27 pp | −0.18 |
+| nondeterminism, *same* seed | −0.18 pp | −0.12 |
+
+**Tuning the learning rate mattered more than every post-training method tested**, by a
+margin nothing else approaches — and the published baseline was trained at the slower one.
+Same seed, same corpus, same epochs: +14.2 pp resolution, +10.4 pp root cause, invalid
+calls 0.59% → 0.01%.
+
+**The seed floor is 3.1 pp, and it is the same size as DPO's effect.** That is why DPO
+helped substantially on one baseline (+4.18 pp, z = 2.83) and not at all on another
+(−0.27 pp) when both baselines were identically configured and scored within 0.2 pp of each
+other. The quantity being measured is comparable to the noise in what it is measured
+against, so a single run cannot resolve it.
+
+Two floors, and using the wrong one is easy: **0.2 pp** between two runs of the *same*
+configuration, **3.1 pp** between independently trained models. Method comparisons are the
+second case. This document reported the first as *the* floor for part of one session, which
+understated the relevant noise sixteenfold.
+
 ## The complete table, and what dominates it
 
 All eight arms, `n = 2,200` each, on 5,000 incidents no model has seen. Bonferroni

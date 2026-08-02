@@ -1,5 +1,5 @@
 MCP-AgentGym — SESSION HANDOFF
-Last updated: 2026-07-30, after commit 0708f83 (+ this cycle's submissions)
+Last updated: 2026-07-30 — variance budget complete, all evaluations landed
 ================================================================================
 
 HOW TO READ THIS FILE
@@ -41,12 +41,26 @@ SURVIVES SCRUTINY
     REPLICATES on a second independently-trained adapter family to within 1.6pp
     (SFT: 35.8% -> 70.0%, z=5.65).
 
-(f) The run-to-run floor is 0.2pp at n=2,200 (two identical-config runs: 57.7% vs
-    57.5%, z=-0.12). NEW this session — see section 3.
+(f) TWO FLOORS, and using the wrong one is the easiest mistake here:
+      same-configuration runs (GPU nondeterminism only): 0.2pp  (z=-0.12)
+      independently trained models (seed 11 vs 12):      3.1pp  (z=-2.06)
+    Method comparisons are the SECOND case. For part of one session this file and
+    the docs quoted 0.2pp as "the floor", which understates the relevant noise by
+    a factor of sixteen. Corrected.
 
-(g) 0 unsafe actions in 3,840 post-trained episodes.
+(g) THE VARIANCE BUDGET, all at n=2,200 on the same 5,000 fresh incidents:
+      learning rate 5e-5 -> 1e-4   +14.23pp   z=+9.54   <-- dominant
+      DPO on baseline A             +4.18pp   z=+2.83
+      seed 11 -> seed 12            -3.09pp   z=-2.06
+      DPO on baseline B             -0.27pp   z=-0.18
+      nondeterminism, same seed     -0.18pp   z=-0.12
+    Tuning the LR mattered more than every post-training method tested. The seed
+    floor (3.1pp) is the SAME SIZE as DPO's effect, which is why the two DPO pairs
+    disagreed — the signal is comparable to the noise in its own baseline.
 
-(h) Environment correctness asserted per fault family; sim-to-real 5/5 on the
+(h) 0 unsafe actions in 3,840 post-trained episodes.
+
+(i) Environment correctness asserted per fault family; sim-to-real 5/5 on the
     process layer (healthy, OOMKilled, BadConfigMap, ReadinessProbeMisconfig,
     CascadingDependencyDown), agreeing on BOTH readiness and reason.
 
