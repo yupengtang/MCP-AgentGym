@@ -1,0 +1,214 @@
+MCP-AgentGym — SESSION HANDOFF
+Last updated: 2026-07-30, after commit e8acf39
+================================================================================
+
+HOW TO READ THIS FILE
+  Everything below is either (a) measured and pinned by a test, or (b) explicitly
+  marked unmeasured/pending. Nothing here is an estimate. If a number appears
+  without a z-value or an n, treat it as suspect and recompute it.
+
+  Regenerate the headline table:  python scripts/pool2_report.py
+  It REFUSES to print if any arm or split is missing. That is deliberate.
+
+
+================================================================================
+1. WHAT THE PROJECT CLAIMS, AND WHAT BACKS EACH CLAIM
+================================================================================
+
+SURVIVES SCRUTINY
+-----------------
+(a) Post-training clears the untrained base on every arm, z >= 3.99, at
+    n=2,200/arm on 5,000 incidents no model has seen (zero id overlap with
+    training).
+
+(b) Invalid tool calls collapse 26.32% -> 0.01-0.35%. A ~100x effect; nothing else
+    in the project comes near it.
+
+(c) Post-training is a TRADE, not an improvement. Base is the BEST model here on
+    fault families it never saw (65.8% vs 33-53% for everything trained).
+    +16.2pp in-catalogue capability (z=10.96) for -27.6pp held-out (z=-19.06).
+
+(d) The mechanism behind (c): fine-tuning drives never-demonstrated diagnosis
+    labels to 0 emissions in 599 submissions (base: 5.0%), though both labels sit
+    in the tool schema and system prompt on every episode.
+
+(e) (c) is REVERSIBLE at serving time without retraining. dW = (alpha/r)*B@A, so
+    scaling lora_B by s scales the update exactly:
+        s=1.00 -> 36.7% held-out,  0/114 labels emitted
+        s=0.75 -> 50.8%,           8/112
+        s=0.50 -> 72.5%,          24/56
+    Monotone, z=5.97 end-to-end, no measurable in-distribution cost, and it
+    REPLICATES on a second independently-trained adapter family to within 1.6pp
+    (SFT: 35.8% -> 70.0%, z=5.65).
+
+(f) The run-to-run floor is 0.2pp at n=2,200 (two identical-config runs: 57.7% vs
+    57.5%, z=-0.12). NEW this session — see section 3.
+
+(g) 0 unsafe actions in 3,840 post-trained episodes.
+
+(h) Environment correctness asserted per fault family; sim-to-real 5/5 on the
+    process layer (healthy, OOMKilled, BadConfigMap, ReadinessProbeMisconfig,
+    CascadingDependencyDown), agreeing on BOTH readiness and reason.
+
+PROVISIONAL — one pair complete, second pair running
+-----------------------------------------------------
+(i) DPO on an LR-MATCHED baseline: +4.2pp resolution (z=2.83), +5.4pp root cause
+    (z=3.60). The published comparison, against an undertuned baseline, gave only
+    +2.1pp (z=1.43) — so the undertuned reference UNDERSTATED DPO.
+    DO NOT write this as a headline until pair 3 (dpos2-p2, job 5557437) lands.
+
+NOT SHOWN, AND THE README SAYS SO
+----------------------------------
+  - Any ordering among SFT / DPO / episode-GRPO / action-GRPO from the ORIGINAL
+    (LR-mismatched) comparison. May change once the LR-matched pairs finish.
+  - Anything about a second base model. Everything is Qwen3-8B.
+  - Live AWS behaviour. Needs the user to run scripts/verify_aws.py.
+
+
+================================================================================
+2. THE FINAL GRID (complete, n=2,200/arm, 5,000 fresh incidents)
+================================================================================
+
+  variant                                    resolved   root   invalid
+  SFT 2ep seed 1 (no post-training)            57.7%   48.9%    0.01%
+  SFT 3ep + DPO-309                            52.5%   51.8%    0.32%
+  SFT 3ep                                      50.3%   50.6%    0.19%
+  SFT 2ep + DPO-435                            44.3%   41.5%    0.18%
+  SFT 2ep + episode-GRPO                       44.2%   40.5%    0.28%
+  SFT 2ep + action-GRPO                        43.0%   38.5%    0.28%
+  SFT 2ep seed A (published baseline, LR 5e-5) 42.1%   36.9%    0.35%
+  base (untrained)                             36.3%   37.6%   26.32%
+
+  NOTE the top row is an SFT with NO post-training. It leads because it trained at
+  LR 1e-4; the published baseline used 5e-5. See section 3.
+
+
+================================================================================
+3. THE BIG CORRECTION OF THIS SESSION — READ BEFORE TRUSTING OLD NUMBERS
+================================================================================
+
+ROOT CAUSE: no launcher ever forwarded --seed.
+
+  All three trainers (sft/dpo/grpo_train.py) accept --seed and use it.
+  slurm/*.sbatch never passed it. Three jobs submitted with SEED=1 / SEED=2 all
+  trained at seed 0 — training_args.bin proves it.
+
+  => EVERY ADAPTER THIS PROJECT HAS EVER PRODUCED TRAINED AT SEED 0.
+
+WHAT THAT INVALIDATED:
+  A "+15.6pp seed variance (z=10.48)" was published as the largest effect in the
+  project and as the reason method comparisons were called uninterpretable.
+  It is a LEARNING-RATE effect: v4 used 5e-5, the newer runs 1e-4. The two runs
+  sharing an LR agree to 0.0005 in train loss.
+
+WHAT REPLACED IT:
+  - The dominant controllable factor is the learning rate, and the published
+    baseline trained at HALF the better one. Every method comparison in the docs
+    was measured against an undertuned reference.
+  - The true floor, measured for the first time: 0.2pp at n=2,200.
+  - Method effects of 2-5pp are 10-25x the floor => READABLE.
+
+ALSO FOUND: train_dpo.sbatch never passed --lr either. DPO's learning rate was
+  always the trainer default; exporting LR did nothing.
+
+GUARD: tests/test_launcher_plumbing.py asserts every result-bearing argument a
+  trainer accepts is reachable from its launcher, and that each carries a default.
+  Its FIRST VERSION was defective in the way it exists to prevent — it searched the
+  raw file, and the comment explaining the fix contains "--seed", so deleting the
+  real argument left it passing. It strips comments now; failure verified by
+  deletion.
+
+A SECOND SUBTLETY WORTH KEEPING:
+  Training here is LOSS-REPRODUCIBLE but WEIGHT-DIVERGENT. Two identical-config
+  runs are 138% apart in relative lora_B norm while agreeing to 0.0005 in loss and
+  0.2pp in evaluation. So weight distance is NOT evidence of behavioural
+  difference — but it IS a sound lineage check, and that is how the withdrawn
+  episode-GRPO run was caught.
+
+  Corollary: per-split differences are NOT the floor. Those two runs differ by up
+  to 9pp on a single 500-700 episode split and by 0.2pp pooled at 2,200. Quoting a
+  per-split gap as run-to-run noise overstates it tenfold — that is where the
+  "11pp floor" this project carried for weeks came from.
+
+
+================================================================================
+4. RETRACTIONS (all in reports/EXPERIMENTS.md with cause + guard)
+================================================================================
+  1. "DPO +8.2pp"           -> +2.1pp under power; never significance-tested when
+                               first published. Winner's curse.
+  2. "pair count matters"   -> 437-pair replication scored identically to 88-pair.
+  3. episode-GRPO damage    -> artifact of an adapter initialised two versions
+                               behind its own training data. Quarantined to
+                               runs/eval-withdrawn/, not deleted.
+  4. "one epoch beats all"  -> confounded; the epoch alone is -4.1pp.
+  5. "seed variance 15.6pp" -> learning rate; the seed was never varied. THIS
+                               SESSION.
+
+  Direction of travel: every increase in rigour moved the answer toward "no
+  measurable difference" — until the LR was matched, at which point DPO reappeared
+  at +4.2pp. Both halves of that story belong in the writeup.
+
+
+================================================================================
+5. DEFECTS FIXED (each has a test; none of them errored at the time)
+================================================================================
+  - --max-prompt-length accepted but reached no code path (action-GRPO)
+  - values-eks.yaml aws.storageClass consumed by no template; gp3 never rendered
+  - settle-timeout counter summed EVENTS, was read as EPISODES (255 vs 27)
+  - SEED forwarded by no launcher (this session)
+  - train_dpo.sbatch never passed --lr (this session)
+  - quickstart's build-datasets would overwrite the published corpora
+  - action-GRPO trainer broken against TRL 1.9 since written (no launcher, so it
+    had never been executed)
+  - report script rendered a "complete" table with two arms entirely absent
+  - 3 dependencies imported but declared nowhere (boto3, moto, safetensors)
+  - 8 doc claims wrong, 6 of them UNDERSTATING (trajectory count 4,092->11,541,
+    tools 26->36, all 12 serving cells stale, expert line, unsafe denominator
+    1,024->3,840, gp3, the 9b verification row, quickstart)
+
+  COMMON SHAPE: none errored. Each described a system that was not the one running.
+
+
+================================================================================
+6. JOBS IN FLIGHT
+================================================================================
+  5557437  p2-dpos2       DPO-on-seed2 evaluation -> completes the paired test
+  5557438  p2-rseed11     first genuinely-different-seed SFT evaluation
+  5557058  sft-realseed12 training (real seed 12)
+  5557059  sft-lr5e5      LR 5e-5 control on the CURRENT corpus, so the LR
+                          comparison is not confounded by v4's unknown provenance
+
+  WHEN 5557437 LANDS: compute the paired DPO test, sign test, paired t. Write to
+  README + EXPERIMENTS. If the pairs disagree in direction, say so — that is a
+  result, not a failure.
+
+
+================================================================================
+7. RULES LEARNED EXPENSIVELY — DO NOT RELAX THESE
+================================================================================
+  - Never read a partial grid and draw a conclusion. This project reversed twice
+    by doing exactly that.
+  - Significance-test everything. Bonferroni when reporting several comparisons.
+  - Per-split differences are NOT the run-to-run floor. Pool first.
+  - Verify an adapter's base by weight digest before evaluating it.
+  - Never delete data. Withdrawn results -> runs/eval-withdrawn/ with a README.
+  - git commit -F - with a heredoc. NEVER -m with backticks: bash
+    command-substitutes them, and pip output once landed inside a commit message.
+  - Commit locally only. Never push.
+  - home quota ~1GB. Install nothing large. Never touch ~/.cache/huggingface.
+  - generator version=1 must stay reproducible; a test pins it. version=2 is
+    prefix-stable, so the pool can grow without renaming anything.
+
+
+================================================================================
+8. BLOCKED (environment, not work quality — state the reason, not "TODO")
+================================================================================
+  - Second base model: Mistral is cached in Mistral format, HF_HUB_OFFLINE=1, so
+    HF-format weights cannot be fetched.
+  - SGLang live benchmark: needs a third venv; home quota exhausted. The INTERFACE
+    is asserted by 5 tests that need no engine installed.
+  - AWS live verification: needs the user to run
+      python scripts/verify_aws.py --bucket agentgym-artifacts-<aws-account-id>
+
+================================================================================
+STATE: 133+ tests, ruff clean, working tree clean at e8acf39.
