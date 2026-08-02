@@ -76,11 +76,12 @@ threshold for the 56 comparisons is z > 3.0.
 random seed.** It beats every post-trained variant, and has the cleanest tool use in the
 project at 0.01% invalid calls.
 
-Two clean single-variable comparisons explain the table:
+Two comparisons explain the table, and **one of them was mislabelled until the launchers
+were audited**:
 
 ```
-SEED    two SFT runs, identical recipe    +15.6 pp   z = +10.48
-EPOCH   same seed, 2 epochs vs 3           -7.4 pp   z =  -4.94    a third epoch hurts
+LEARNING RATE   5e-5 (v4) vs 1e-4, same seed    +15.6 pp   z = +10.48
+EPOCH           2 vs 3 epochs, same seed         -7.4 pp   z =  -4.94    a third epoch hurts
 ```
 
 against every post-training method:
@@ -91,21 +92,29 @@ against every post-training method:
 + action-GRPO     +0.9 pp   z = 0.60    not resolved
 ```
 
-**The seed is seven times the largest method effect.** So is the (negative) epoch effect,
-at three and a half times. Even "how much does SFT help" is seed-dependent by a factor of
-3.6: base → SFT is +5.9 pp (z = 3.99) with one seed and +21.5 pp (z = 14.60) with another,
-same recipe, same data.
+**The published baseline was trained at half the better learning rate.** Doubling it moves
+resolution seven times further than any post-training method does — so every method
+comparison in this project was measured against an undertuned reference.
+
+That 15.6 pp was written up as *seed variance* for several hours. It is not: every adapter
+ever produced here trained at seed 0, because all three launchers accepted a `SEED`
+environment variable and forwarded it to nothing. `training_args.bin` records the truth.
+The two runs that share a learning rate agree to 0.0005 in training loss. The launchers are
+fixed, `tests/test_launcher_plumbing.py` asserts every result-bearing argument reaches its
+trainer, and the first runs in this project's history with a genuinely different seed are
+in flight — so the real run-to-run floor is, as of now, **unmeasured**.
 
 ## What this project cannot tell you, and says so
 
-**Which post-training method is best.** Two SFT runs differing only in random seed are
-**12.6 pp apart (z = 5.00)** — three times the largest method effect, and the only such
-comparison that clears significance:
+**Which post-training method is best.** Not because of seed noise — that was a
+misattribution, corrected above — but because the reference they were measured against was
+trained at half the better learning rate, and because the true seed-to-seed floor has never
+been measured in this project. The comparison table as it stands:
 
 | comparison | Δ resolution | z |
 |---|---|---|
-| **SFT seed A → seed B, identical recipe** | **+12.6 pp** | **5.00** |
-| SFT 2 epochs → 3 epochs, same seed | −4.1 pp | −1.69 |
+| **learning rate 5e-5 → 1e-4** | **+12.6 pp** | **5.00** |
+| SFT 2 epochs → 3 epochs, same LR and seed | −4.1 pp | −1.69 |
 | SFT → + DPO (435 pairs) | +4.0 pp | 1.54 |
 | SFT → + episode-level GRPO | +3.3 pp | 1.26 |
 | SFT → + action-level GRPO | −1.3 pp | −0.50 |
@@ -114,10 +123,13 @@ DPO and both GRPO variants were trained once each, so their gains sit inside the
 recipe produces by reseeding. Establishing that any of them helps needs several seeds per
 arm, which has not been done here.
 
-Reaching that took three revisions, each downward, each after removing a confound or adding
-power: DPO's "+8.2 pp" became +2.1 pp; the residual was reattributed to a missing training
-epoch; the epoch turned out to be the seed. **Every increase in rigour moved the answer
-toward "no measurable difference."** The two findings above survive because neither is a
+Reaching that took four revisions, each after removing a confound or adding power: DPO's
+"+8.2 pp" became +2.1 pp under power; the residual was reattributed to a missing training
+epoch; the epoch turned out to be a difference between adapters; and that difference turned
+out to be learning rate rather than seed, because the seed was never varied at all.
+**Every increase in rigour moved the answer toward "no measurable difference" — and the
+last step also produced an actionable one: tune the learning rate before comparing
+methods.** The two findings above survive because neither is a
 single-run A-vs-B comparison — one is a 16 pp effect with z = 11, the other a dose-response
 across four levels replicated on two adapter families.
 

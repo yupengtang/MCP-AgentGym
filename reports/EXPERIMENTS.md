@@ -657,6 +657,57 @@ degrades capability, not that episode-level GRPO cannot work. The obvious next m
 smaller step size and a KL reference that constrains the *evaluation* distribution rather
 than the training one.
 
+### CORRECTION — the "seed variance" was a learning rate, and the seed was never varied
+
+The section below attributes +15.6 pp to seed variance and concludes that no single-run
+method comparison in this project is interpretable. **The attribution is wrong.** The
+conclusion partly survives, for a different reason.
+
+`training_args.bin` for all three 2-epoch SFT adapters:
+
+| adapter | seed | learning rate | train loss |
+|---|---|---|---|
+| `sft-qwen3-8b-v4` (published) | **0** | **5e-5** | 0.0918 |
+| `sft-2ep-seed1` | **0** | **1e-4** | 0.0728 |
+| `sft-2ep-seed2` | **0** | **1e-4** | 0.0733 |
+
+Every adapter this project has ever produced trained at **seed 0**. All three launchers
+accepted a `SEED` environment variable; none forwarded it to the trainer, which has taken
+`--seed` and used it the whole time. Three jobs were submitted with `SEED=1` and `SEED=2`
+and all of them ignored it.
+
+So the 15.6 pp is a **learning-rate effect, 5e-5 against 1e-4**. The two runs sharing a
+learning rate agree to 0.0005 in training loss, which is what a same-seed repeat should
+look like.
+
+**What this changes.**
+
+* The dominant controllable factor is the learning rate, and **the published baseline was
+  trained at half the better one**. Every method comparison in this document was measured
+  against an undertuned reference — which is a more useful finding than "the noise is too
+  large", because it names something a reader can act on.
+* The true seed-to-seed floor is **unmeasured**. It might be small, in which case the
+  method comparisons become interpretable once the learning rate is fixed; it might not.
+  The first runs with a genuinely different seed are in flight.
+* The conclusion that the method ordering is unsupported still stands, but its reason
+  changes: not "seed noise swamps it" but "the baseline was undertuned and the noise floor
+  is unknown."
+
+**A second instance of the same defect, found by the same audit:** `train_dpo.sbatch`
+never passed `--lr` either, so DPO's learning rate was always the trainer's default and
+exporting `LR` did nothing.
+
+`tests/test_launcher_plumbing.py` now asserts that every result-bearing argument a trainer
+accepts is reachable from its launcher. Its first version was defective in exactly the way
+it exists to prevent — it searched the raw file, and the comment explaining the fix contains
+the string `--seed`, so deleting the real argument left it passing. It strips comments now,
+and the failure was verified by deletion.
+
+This is the fourth defect of this shape in the repository: a `--max-prompt-length` that
+reached no code path, a `values-eks.yaml` block consumed by no template, a settle-timeout
+counter that summed events and was read as episodes, and now a `SEED` nothing forwarded.
+**None errored. Each described a system that was not the one running.**
+
 ### Final: the complete grid, and the two variables that dominate it
 
 All eight arms complete, n = 2,200 each, on 5,000 incidents no model has seen.
