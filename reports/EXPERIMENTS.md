@@ -657,6 +657,40 @@ degrades capability, not that episode-level GRPO cannot work. The obvious next m
 smaller step size and a KL reference that constrains the *evaluation* distribution rather
 than the training one.
 
+### The run-to-run floor is 0.2 pp, not 15.6 pp — and it makes the method effects readable
+
+With the launcher fixed, the floor could finally be measured. Two SFT runs with **identical
+configuration** — same seed 0, same LR 1e-4, same corpus, same 2 epochs — differing only in
+GPU nondeterminism:
+
+| | run 1 | run 2 | Δ | z |
+|---|---|---|---|---|
+| in-distribution | 72.0% | 66.9% | −5.1 pp | |
+| unseen fault | 53.2% | 56.6% | +3.4 pp | |
+| unseen topology | 55.8% | 65.0% | +9.2 pp | |
+| compositional | 44.2% | 38.0% | −6.2 pp | |
+| **all (n = 2,200)** | **57.7%** | **57.5%** | **−0.2 pp** | **−0.12** |
+| root cause | 48.9% | 49.9% | +1.0 pp | +0.63 |
+
+**0.2 pp.** Not 15.6. The number that made every method comparison look hopeless was a
+learning-rate difference wearing a seed's name.
+
+Two things worth separating here. Per-split the runs wobble by up to 9 pp, because each
+split is 500–700 episodes; pooled to 2,200 they agree to a fifth of a point. **The floor is
+a property of the measurement size, not of training** — quoting a per-split difference as
+run-to-run noise overstates it by an order of magnitude, which is exactly the error that
+produced the 11 pp figure this project carried for weeks.
+
+And the training is **loss-reproducible but weight-divergent**: those two adapters sit
+**138% apart** in relative `lora_B` norm while their train losses agree to 0.0005 and their
+evaluations to 0.2 pp. Different points in weight space, same function. A weight-space
+distance is therefore not evidence of a behavioural difference, though it remains a valid
+*lineage* check — which is how the withdrawn episode-GRPO run was caught.
+
+**The consequence: method effects of 2–5 pp are ten to twenty-five times the floor and are
+readable.** The earlier conclusion that no single-run comparison here is interpretable was
+wrong, and wrong because of the same misattribution.
+
 ### CORRECTION — the "seed variance" was a learning rate, and the seed was never varied
 
 The section below attributes +15.6 pp to seed variance and concludes that no single-run
