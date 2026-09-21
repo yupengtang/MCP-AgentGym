@@ -278,7 +278,7 @@ Kubernetes for persistent serving, stateful agent execution, and isolated incide
 
 ## 10. Definition of done
 
-- [x] 4 MCP servers, **36** typed tools, real MCP protocol (7 compliance tests)
+- [x] 4 MCP servers, **36** typed tools, real MCP protocol (8 compliance tests)
 - [x] 14 fault families, 1,200 seeded incidents, held-out splits
 - [x] Real Kubernetes control plane, deterministic reset, parallel episodes
 - [x] **11,541** executed and programmatically verified trajectories
@@ -287,14 +287,19 @@ Kubernetes for persistent serving, stateful agent execution, and isolated incide
 - [x] Helm chart with RBAC and NetworkPolicy; OTel + Prometheus + MLflow + CI
 - [x] Expert reference line across all 12 perturbation suites × 4 splits
 - [x] Experiment report, README, 3-minute demo script
-- [x] 112 tests green, ruff clean, Helm lints
+- [x] 140 tests green, ruff clean, Helm lints
 - [x] QLoRA SFT trained; DPO and GRPO trainers written, reward verified
 - [x] Base / SFT / DPO evaluation matrices across 4 splits and 7 tool-schema suites
 - [x] vLLM prefix-cache / structured-output / multi-LoRA benchmarks
 - [x] DPO run on mined preference pairs — twice, as a pair-count ablation (88 vs 435)
-- [x] Episode-level GRPO implemented and dry-run verified *(597/600 groups usable;
-      training run in flight, no result claimed from it yet)*
-- [ ] Action-level GRPO policy trained and evaluated *(trainer written, not run)*
+- [x] Episode-level GRPO trained and evaluated *(597/600 groups usable, 149 optimizer
+      steps; 44.2% at n = 2,200, inside the 3.1 pp seed floor)*
+- [x] Action-level GRPO trained and evaluated *(43.0% at n = 2,200; also inside the floor)*
+- [x] Variance budget measured — learning rate, seed, and same-configuration
+      nondeterminism separated, which is what makes the method effects readable
+- [ ] Several seeds per method arm *(the grid establishes that post-training works and
+      cannot establish which method is best: every arm is one training run, and the
+      run-to-run floor between independently trained models is 3.1 pp)*
 - [ ] SGLang **benchmarked against a live server** *(`SGLangBackend` is implemented
       and its interchangeability with `VLLMBackend` is asserted by
       `tests/test_backend_pluggability.py` — identical request payload, identical

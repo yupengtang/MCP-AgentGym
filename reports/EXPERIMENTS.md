@@ -806,6 +806,9 @@ look like.
 * The true seed-to-seed floor is **unmeasured**. It might be small, in which case the
   method comparisons become interpretable once the learning rate is fixed; it might not.
   The first runs with a genuinely different seed are in flight.
+  *(Resolved: seed 11 vs seed 12 is **3.1 pp**, z = −2.06 — the same size as DPO's effect,
+  which is why the paired DPO test came out a negative. See "The variance budget,
+  decomposed" above.)*
 * The conclusion that the method ordering is unsupported still stands, but its reason
   changes: not "seed noise swamps it" but "the baseline was undertuned and the noise floor
   is unknown."
@@ -1070,6 +1073,11 @@ Two runs are in flight to settle it rather than argue it: a 2-epoch SFT at the *
 as the 3-epoch run, which isolates the epoch effect from the seed effect; and DPO trained
 on top of the 3-epoch SFT, which answers the question that actually matters — whether
 preference optimisation adds anything to a base that is not undertrained.
+
+*(Resolved, and then re-resolved. The epoch alone is **−4.1 pp**, so the apparent epoch
+effect was a difference between adapters — and that difference was later traced to the
+**learning rate**, not the seed, because no launcher ever forwarded `--seed`. Both
+retractions are recorded below.)*
 
 Note what nearly happened. The +13.8 pp root-cause gap between the two SFT runs was, for
 several minutes, about to be written up as *seed variance so large it invalidates every
@@ -1357,12 +1365,13 @@ retraction unverifiable; leaving them in place would make it ineffective.
 
 Stated as open rather than quietly omitted.
 
-- **Episode-level GRPO is trained; its evaluation is in flight.** 149 optimizer steps over
-  2,388 episodes in 597 groups, KL to the frozen SFT reference drifting 0.011 → 0.022,
-  truncation 0.88% against 1.2% predicted. No capability number from it is claimed until
-  the ten-cell evaluation completes.
-- **Action-level GRPO** (`grpo_train.py`) is implemented but its trained policy has not
-  been evaluated in the tables above.
+- **Several seeds per method arm.** This is the one open item that would change a
+  conclusion. Both GRPO variants are now trained and evaluated at n = 2,200 — episode-level
+  44.2%, action-level 43.0%, against the matched SFT's 42.1% — and both differences sit
+  inside the 3.1 pp floor between independently trained models. Every arm in the grid is a
+  single training run, so the grid establishes that post-training works and cannot
+  establish which method is best. Resolving it needs several seeds per arm, and the
+  launcher defect that made every adapter train at seed 0 was only fixed near the end.
 - **Node-layer sim-to-real fidelity.** `src/agentgym/fidelity.py` validates the process
   layer against real processes, real `RLIMIT_AS` kernel enforcement and real HTTP/TCP
   (5/5 agreement on readiness *and* reason). The container/kubelet layer has no real-runtime
