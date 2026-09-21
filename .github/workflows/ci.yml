@@ -9,11 +9,16 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: uv venv --python 3.12
+
       - name: Install
-        run: |
-          uv pip install -e '.[dev]'
+        run: uv pip install -e '.[dev]'
+
+      # Run the venv's executables directly rather than through `uv run`. `uv run`
+      # locks the whole project first, and a lockfile has to cover every extra, so it
+      # resolves `serve` as well -- which means building vllm from source on a runner
+      # with no CUDA. CI needs the dev extra and nothing else.
       - name: Lint
-        run: uv run ruff check src tests
+        run: .venv/bin/ruff check src tests
 
       # The environment tests need a real Kubernetes control plane. The binaries are
       # ~330MB, so they are cached rather than refetched on every run.
@@ -27,10 +32,14 @@ jobs:
           AGENTGYM_BIN: ${{ github.workspace }}/.agentgym-bin
         run: bash scripts/fetch_k8s_binaries.sh
 
+      # Everything needing a GPU, a trained adapter, or a stored run tree skips itself:
+      # torch and moto via importorskip, helm via shutil.which, the report and dataset
+      # assertions when their artifacts are absent. What remains is the part CI can
+      # actually decide -- that the environment, the MCP protocol layer and the
+      # operator behave as specified on a clean machine.
       - name: Environment contract + MCP protocol + operator
         env:
           AGENTGYM_BIN: ${{ github.workspace }}/.agentgym-bin
           AGENTGYM_HOME: ${{ github.workspace }}/.agentgym-home
           AGENTGYM_RUNTIME: ${{ runner.temp }}/agentgym-runtime
-        run: |
-          uv run pytest tests/ -q --no-header
+        run: .venv/bin/pytest tests/ -q --no-header -rs
