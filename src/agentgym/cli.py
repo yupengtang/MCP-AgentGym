@@ -138,9 +138,11 @@ def build_datasets(
     from agentgym.data import curate
     from agentgym.data import trajectory as traj_mod
 
-    src = trajectories or (cfg.RUNS_DIR / "expert-clean")
-    files = sorted(src.glob("*.jsonl")) if src.is_dir() else [src]
-    all_traj = [t for f in files for t in traj_mod.read_jsonl(f)]
+    # Check the destination before reading the source. The refusal is a data-safety
+    # guard and has to fire on its own terms, not only when the inputs happen to be
+    # present: on a checkout with no rollouts yet, reading the source first turned this
+    # into a FileNotFoundError about the *input* while the datasets it was about to
+    # replace went unmentioned.
     out = out_dir or (cfg.DATA_DIR / "sft")
     existing = sorted(p.name for p in out.glob("*.jsonl")) if out.exists() else []
     if existing and not overwrite:
@@ -149,6 +151,14 @@ def build_datasets(
         typer.echo("  pass --out-dir <new> to build elsewhere, or --overwrite to replace.",
                    err=True)
         raise typer.Exit(code=1)
+
+    src = trajectories or (cfg.RUNS_DIR / "expert-clean")
+    files = sorted(src.glob("*.jsonl")) if src.is_dir() else [src]
+    if not files or not all(f.exists() for f in files):
+        typer.echo(f"no trajectories to curate: {src} does not exist.", err=True)
+        typer.echo("  run `agentgym rollout --policy expert` first.", err=True)
+        raise typer.Exit(code=1)
+    all_traj = [t for f in files for t in traj_mod.read_jsonl(f)]
     out.mkdir(parents=True, exist_ok=True)
 
     # Everything outside in-distribution is evaluation by construction; additionally

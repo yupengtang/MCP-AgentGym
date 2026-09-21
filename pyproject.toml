@@ -17,7 +17,12 @@ dependencies = [
     "structlog",
     "numpy",
     "prometheus-client",
-    "mcp",
+    # The servers are written against the 1.x decorator API (`@server.list_tools()`).
+    # mcp 2.x removes it, so an unconstrained install resolves to 2.2 and every server
+    # in mcp/servers.py fails to build with AttributeError -- which is what a fresh
+    # checkout got, while the pinned environment the results were measured in kept
+    # working. Bounded until the servers are ported.
+    "mcp>=1.28,<2",
     "jsonschema",
 ]
 

@@ -127,19 +127,36 @@ def test_fault_breaks_then_fixes(gym, fault):
         # loaded machine produces fewer pods per tick; a fixed budget therefore makes a
         # correct fix look broken as a function of machine load, not of the fix. A
         # dependency chain also resolves one tier per tick, so allow several rounds.
-        for _ in range(4):
+        #
+        # Run until the cluster stops changing rather than for a fixed count, because
+        # that is what the assertion below actually claims: the known-correct fix
+        # resolves the incident once the world has settled. A fixed 4 rounds failed
+        # `RolloutStuck` on a loaded machine with the datastore still `Booting` and its
+        # dependants still crashlooping behind it -- a verdict read one tier too early,
+        # not a broken fix.
+        previous, stable = None, False
+        for _ in range(8):
             ep.settle_world()
             if ep.resolved():
                 break
+            current = ep.pod_verdicts()
+            if current == previous:
+                stable = True
+                break
+            previous = current
 
-        # A settle timeout means the control plane never produced the pods it intended, so
-        # the verdict below would be about machine load rather than about the fix. Say so
-        # explicitly instead of reporting a fix failure, which is what the raw assertion
-        # did -- and which made this test flake on a different fault each full-suite run.
-        if not ep.resolved() and ep.settle_timeouts:
+        # Two ways the verdict would be about machine load rather than about the fix: the
+        # control plane never produced the pods it intended (a settle timeout), or the
+        # cluster was still converging when the round budget ran out. Say so explicitly
+        # instead of reporting a fix failure, which is what the raw assertion did -- and
+        # which made this test flake on a different fault each full-suite run. A cluster
+        # that has gone *stable* and is still unresolved is a real failure and falls
+        # through to the assertion.
+        if not ep.resolved() and (ep.settle_timeouts or not stable):
             pytest.skip(
-                f"{fault}: control plane did not settle ({ep.settle_timeouts} timeouts at "
-                f"{episode_mod.SETTLE_TIMEOUT_S}s); verdict would measure load, not the fix"
+                f"{fault}: cluster had not settled "
+                f"({ep.settle_timeouts} timeouts at {episode_mod.SETTLE_TIMEOUT_S}s, "
+                f"still changing={not stable}); verdict would measure load, not the fix"
             )
 
         assert ep.resolved(), (
