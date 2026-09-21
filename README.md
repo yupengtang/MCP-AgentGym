@@ -2,8 +2,8 @@
 
 **A verifiable Kubernetes incident gym for post-training and serving tool-using agents.**
 
-MCP-AgentGym runs a **real Kubernetes control plane** — etcd, apiserver, controller-manager,
-scheduler — as unprivileged user processes, and replaces the kubelet with a deterministic
+MCP-AgentGym runs a **real Kubernetes control plane** (etcd, apiserver, controller-manager,
+scheduler) as unprivileged user processes, and replaces the kubelet with a deterministic
 workload simulator. Incidents are injected from a seeded catalogue of 14 fault families, an
 agent works them through 36 typed MCP tools, and an executable verifier reads live cluster
 state to decide whether the incident was actually fixed. No model judges anything.
@@ -13,9 +13,10 @@ That gives the three properties post-training needs and a real cluster cannot pr
 rather than graded.** On top of it the project trains Qwen3-8B with SFT, DPO and two
 flavours of GRPO, serves the result through vLLM, and measures what survives.
 
-📊 **[Results and methodology →](https://yupengtang.github.io/MCP-AgentGym/)**  ·
-📐 [Design document](DESIGN.md) · 🧪 [Experiment log](reports/EXPERIMENTS.md) ·
-🗂 [Design decisions](PROJECT.md)
+**[Results and methodology](https://yupengtang.github.io/MCP-AgentGym/)** ·
+[Design document](DESIGN.md) ·
+[Experiment log](reports/EXPERIMENTS.md) ·
+[Design decisions](PROJECT.md)
 
 ---
 
@@ -40,14 +41,14 @@ what it costs        held-out families   −27.6 pp        z = −19.06
 
 Both sides clear significance by a wide margin, and both dwarf every difference between
 post-training methods. **The untrained model is the best agent in this project on fault
-families it was never trained for** — 65.8% against 33–41% for everything trained — and the
-worst everywhere else.
+families it was never trained for** (65.8% against 33–41% for everything trained), and it is
+the worst everywhere else.
 
 **The mechanism is measurable.** Fine-tuning drives the two never-demonstrated diagnosis
 labels to **0 emissions in 599 submissions** (base: 25/501, 5.0%), though both sit in the
 `submit_diagnosis` enum and the system prompt on every episode. The models are not blind to
 those labels; they can no longer reach them. What they emit instead is confidently wrong and
-drawn from the training catalogue — `readiness_probe_targets_wrong_endpoint` for 17 of 32
+drawn from the training catalogue: `readiness_probe_targets_wrong_endpoint` for 17 of 32
 `NodeNotReady` incidents. That is **label-prior collapse**, not degraded reasoning, and the
 distinction decides the fix: degraded reasoning needs better data, a collapsed prior needs
 the update attenuated.
@@ -65,7 +66,7 @@ by multi-LoRA:
 
 Monotone at every step, both adjacent comparisons significant (z = 3.55, z = 2.22),
 **z = 5.97 end-to-end**, and no measurable in-distribution cost (67.2% vs 65.6%, z = 0.27).
-**It replicates on a second, independently trained adapter family to within 1.6 pp** — the
+**It replicates on a second, independently trained adapter family to within 1.6 pp**: the
 SFT adapter recovers 35.8% → 70.0% (z = 5.65). Two policies trained by different objectives
 on different data collapse the same way and recover the same way, which is the strongest
 available evidence that the cause is update *magnitude* rather than anything incidental to
@@ -87,7 +88,7 @@ Every source of variation this project can measure, all at `n = 2,200` per arm o
 | nondeterminism, *same* seed | −0.18 pp | −0.12 |
 
 **Tuning the learning rate mattered more than every post-training method tested**, by a
-margin nothing else approaches — and the published baseline had been trained at the slower
+margin nothing else approaches, and the published baseline had been trained at the slower
 one. Same seed, same corpus, same epochs: +14.2 pp resolution, +10.4 pp root cause, invalid
 calls 0.59% → 0.01%.
 
@@ -108,13 +109,13 @@ All eight arms, `n = 2,200` each. Bonferroni threshold for the 56 comparisons is
 
 | variant | resolved | root cause | invalid calls |
 |---|---|---|---|
-| **SFT 2 epochs, seed 1 — no post-training** | **57.7%** | 48.9% | **0.01%** |
+| **SFT 2 epochs, seed 1 (no post-training)** | **57.7%** | 48.9% | **0.01%** |
 | SFT 3 epochs + DPO-309 | 52.5% | **51.8%** | 0.32% |
 | SFT 3 epochs | 50.3% | 50.6% | 0.19% |
 | SFT 2 epochs + DPO-435 | 44.3% | 41.5% | 0.18% |
 | SFT 2 epochs + episode-GRPO | 44.2% | 40.5% | 0.28% |
 | SFT 2 epochs + action-GRPO | 43.0% | 38.5% | 0.28% |
-| SFT 2 epochs, seed A — the published baseline | 42.1% | 36.9% | 0.35% |
+| SFT 2 epochs, seed A (the published baseline) | 42.1% | 36.9% | 0.35% |
 | base, untrained | 36.3% | 37.6% | 26.32% |
 
 **The best agent here is a plain supervised fine-tune that happened to train at the better
@@ -125,7 +126,7 @@ of one.
 ## What this project does not establish
 
 **Whether DPO helps, as a number.** With the learning rate matched and the floor measured,
-the question was asked properly — train DPO from a specific SFT, compare against *that* SFT.
+the question was asked properly: train DPO from a specific SFT, compare against *that* SFT.
 Two pairs, both baselines identically configured, scoring 57.7% and 57.5%:
 
 | | Δ resolution | z | Δ root cause | z |
@@ -133,7 +134,7 @@ Two pairs, both baselines identically configured, scoring 57.7% and 57.5%:
 | pair 1 | **+4.18 pp** | +2.83 | **+5.41 pp** | +3.60 |
 | pair 2 | −0.27 pp | −0.18 | +0.05 pp | +0.03 |
 
-**They disagree, and it is not evaluation noise** — the floor is 0.2 pp and pair 1's effect is
+**They disagree, and it is not evaluation noise**. The floor is 0.2 pp and pair 1's effect is
 twenty times that. The same recipe on two indistinguishable baselines gives a large gain once
 and nothing the other time, so the variability is in *training*, not measurement. DPO can help
 by a wide margin; what cannot be quoted is a number. Two pairs also cannot support a sign
@@ -154,7 +155,7 @@ renders and is diffed in tests. Neither has been run against a real account.
 ## Why believe any of it
 
 The discipline that produced the results above also retracted five of this project's earlier
-claims — including one that was published here, contradicted by a later run, and withdrawn
+claims, including one that was published here, contradicted by a later run, and withdrawn
 with its trajectories quarantined rather than deleted:
 
 | retracted claim | what it actually was |
@@ -165,7 +166,7 @@ with its trajectories quarantined rather than deleted:
 | "one SFT epoch beats every method" | Confounded; the epoch alone is −4.1 pp. |
 | "seed variance is 15.6 pp" | Learning rate. **No launcher ever forwarded `--seed`, so every adapter this project produced trained at seed 0.** |
 
-Every increase in rigour moved the answer toward "no measurable difference" — until the
+Every increase in rigour moved the answer toward "no measurable difference", until the
 learning rate was matched, at which point DPO reappeared at +4.2 pp on one baseline and
 nothing on another. Both halves of that belong in the record, and both are in
 [reports/EXPERIMENTS.md](reports/EXPERIMENTS.md) with the defect that caused each retraction
@@ -174,7 +175,7 @@ and the assertion that now prevents it.
 **The guards are in the code, not the prose.** The report script refuses to render a partial
 grid. A test asserts every tool count quoted in the docs matches the registry, another that
 the serving numbers are recomputable from their raw artifacts. Training records a weight digest
-of its base adapter, so lineage is checkable — that is how the withdrawn GRPO run was caught.
+of its base adapter, so lineage is checkable. That is how the withdrawn GRPO run was caught.
 `build-datasets` refuses to overwrite the corpora the published results were trained on. And
 `tests/test_launcher_plumbing.py` asserts that every result-bearing argument a trainer accepts
 is reachable from its launcher, because for most of this project's life `--seed` was not.
@@ -186,7 +187,7 @@ is reachable from its launcher, because for most of this project's life `--seed`
 Post-training an agent needs thousands of **resettable, seeded, parallel** episodes with
 **verifiable** rewards. A real Kubernetes cluster gives none of those: episodes take minutes,
 never reset cleanly, and are nondeterministic, so the same action yields different rewards on
-different runs — fatal for DPO preference pairs and GRPO advantages alike. So the stack is
+different runs, which is fatal for DPO preference pairs and GRPO advantages alike. So the stack is
 split at the API boundary, which is exactly where an agent operates anyway.
 
 ```
@@ -212,8 +213,8 @@ Incident generator ──► Kubernetes incident environment ──► MCP gatew
 | Traffic, health, metrics, logs | **Simulated** | Health is a pure function of cluster state, so the verifier is exact. |
 | The scripted expert | **Scripted, not a model** | Reference ceiling and SFT demonstration source. Always reported as a scripted policy. |
 
-Container runtimes were unavailable on the target hardware — no root, no Docker, no
-`/etc/subuid` range for rootless Podman — which is what forced this split. But as argued in
+Container runtimes were unavailable on the target hardware (no root, no Docker, no
+`/etc/subuid` range for rootless Podman), which is what forced this split. But as argued in
 [PROJECT.md §1.1](PROJECT.md), it is the correct architecture for post-training regardless of
 hardware.
 
@@ -250,7 +251,7 @@ The prompt-contract suite exists because of the worst bug in this project: tool 
 passed as an OpenAI API field that the project's own chat template ignored, so the model was
 being asked to call tools it had never been shown. Nothing raised. It would have silently
 voided both the base-model comparison and the entire schema-shift result. The invariant is now
-asserted — whatever the gateway presents must be literally present in the text the model
+asserted: whatever the gateway presents must be literally present in the text the model
 receives.
 
 Sim-to-real fidelity is checked where it is checkable: 5/5 on the process layer (healthy,
@@ -265,9 +266,9 @@ on **both** readiness and reason.
 | Trajectories executed and verified | **11,541** |
 | Control plane start | ~13 s, amortised over hundreds of episodes |
 | Median episode wall time | **2.4 s** |
-| GPU cost of the environment | **zero** — CPU only |
+| GPU cost of the environment | **zero**: CPU only |
 | QLoRA SFT (Qwen3-8B, 3 epochs, 614 examples) | 1 h 29 m on one L40S |
-| Unsafe actions across 3,840 post-trained episodes | **0** |
+| Unsafe actions in 3,840 episodes (every post-trained variant, clean and perturbed) | **0** |
 
 ### The scripted expert reference line
 
@@ -280,7 +281,7 @@ every turn.
 | expert-scripted | 4,010 | 91.4% | 100.0% | 0.0% | 0.0% | 8.0 | 2.60 |
 
 By split: in-distribution 92.9%, unseen fault 97.8%, unseen topology 95.0%, **compositional
-50.8%**. The compositional number is the informative one — the expert reasons about a single
+50.8%**. The compositional number is the informative one. The expert reasons about a single
 root cause, so when two independent faults are injected at once it fixes one and leaves the
 other. Single-fault reasoning does not compose, and the environment measures that directly
 rather than asserting it.
@@ -301,8 +302,9 @@ in-distribution incidents, so the tool surface is the only thing that varies. `n
 
 Both post-trained variants are far more robust than base to a **renamed** tool (1.09–1.12 vs
 0.82), a **renamed argument** (1.18–1.21 vs 1.00) and **distractor** tools (1.15–1.29 vs 0.77).
-They learned to *read* the schema they are given rather than recall tool names from training —
-the intended effect, and the clearest evidence the gain is not memorisation.
+They learned to *read* the schema they are given rather than recall tool names from
+training, which is the intended effect and the clearest evidence that the gain is not
+memorisation.
 
 The floor is still the floor. Nobody handles a tool that **disappears**: even a policy reading
 the schema perfectly retains only 0.74, because a withdrawn tool cannot be called by anyone.
@@ -320,14 +322,14 @@ exactly as an episode does, so the shared prefix grows while new tokens per turn
 | 20 | 21,943 | 32 | 84,418 ms | **6,576 ms** | **12.8×** |
 
 Throughput at 20 turns / 32 concurrent: **0.26 → 4.67 req/s (18×)**. Read as cost per unit of
-prompt, ms per 1k prompt tokens goes 3,781 → 3,847 uncached (flat — every turn re-reads the
-whole conversation) against 870 → **300** cached. **Prefix caching does not merely help agent
+prompt, ms per 1k prompt tokens goes 3,781 → 3,847 uncached (flat, because every turn re-reads
+the whole conversation) against 870 → **300** cached. **Prefix caching does not merely help agent
 workloads; its benefit compounds with conversation depth**, which is the defining property of
 one.
 
 Multi-LoRA on one engine: base 2,292 ms p50 against the SFT adapter's 1,075 ms. The adapter is
-2.1× faster because it emits a short tool call where the base emits a long `<think>` block — a
-latency win that comes from behaviour, not from the engine.
+2.1× faster because it emits a short tool call where the base emits a long `<think>` block,
+a latency win that comes from behaviour rather than from the engine.
 
 ---
 
@@ -359,7 +361,7 @@ python -m agentgym.eval.report                # rebuild all matrices
 ```
 
 Site-specific paths (shared storage, node-local scratch, a shared HF cache) go in
-`env.local.sh` — copy `env.local.sh.example`. It is never committed.
+`env.local.sh`: copy `env.local.sh.example`. It is never committed.
 
 ## Repository map
 
@@ -381,27 +383,27 @@ tests/           140 tests: environment contract, MCP protocol, operator, plumbi
 
 **The pieces worth reading first:**
 
-- [`cluster/kubelet_sim.py`](src/agentgym/cluster/kubelet_sim.py) — the deterministic workload
+- [`cluster/kubelet_sim.py`](src/agentgym/cluster/kubelet_sim.py): the deterministic workload
   state machine, and why pod reaping is the kubelet's job
-- [`incidents/faults.py`](src/agentgym/incidents/faults.py) — 14 families, each with an
+- [`incidents/faults.py`](src/agentgym/incidents/faults.py): 14 families, each with an
   executable resolution predicate and a forbidden-action set
-- [`mcp/perturb.py`](src/agentgym/mcp/perturb.py) — the schema-shift layer
-- [`data/trajectory.py`](src/agentgym/data/trajectory.py) — verification and the reward
-- [`train/episode_grpo.py`](src/agentgym/train/episode_grpo.py) — group-relative advantages
+- [`mcp/perturb.py`](src/agentgym/mcp/perturb.py): the schema-shift layer
+- [`data/trajectory.py`](src/agentgym/data/trajectory.py): verification and the reward
+- [`train/episode_grpo.py`](src/agentgym/train/episode_grpo.py): group-relative advantages
   over whole episodes, no critic
-- [`operator/controller.py`](src/agentgym/operator/controller.py) — reconciliation, finalizers,
+- [`operator/controller.py`](src/agentgym/operator/controller.py): reconciliation, finalizers,
   owner references
 
 ## Reward
 
-**Episode reward** — what SFT data is filtered on and what evaluation reports:
+**Episode reward**, which is what SFT data is filtered on and what evaluation reports:
 
 ```
 score = 2.0·resolved + 0.5·root_cause_correct + 0.4·validated + 0.2·recovered
       − 0.05·unnecessary_calls − 0.3·invalid_calls − 0.8·unsafe_actions − 0.1·over_budget
 ```
 
-**Action reward** — what action-level GRPO optimises, one tool call at a time:
+**Action reward**, which is what action-level GRPO optimises, one tool call at a time:
 
 ```
 +1.0 parses · +1.0 known tool · +1.0 schema-valid · +0.5 matches expert · −3.5 unsafe
@@ -412,8 +414,8 @@ judges any of it.
 
 The `−3.5` is sized deliberately so a *well-formed forbidden* action scores below emitting
 nothing parseable (−0.5 vs 0.0). A smaller penalty would leave the model better off confidently
-deleting a pod than staying quiet — the wrong lesson for an agent holding production
-credentials. `tests/test_reward.py` asserts that ordering.
+deleting a pod than staying quiet, which is the wrong lesson for an agent holding
+production credentials. `tests/test_reward.py` asserts that ordering.
 
 **Episode-level GRPO.** Action-level optimisation cannot credit-assign across a whole incident,
 so `train/episode_grpo.py` groups *G* rollouts of the **same** incident and standardises the
@@ -423,22 +425,22 @@ episode reward within the group:
 A_i = (R_i − mean(R_group)) / (std(R_group) + ε)
 ```
 
-The group mean replaces a learned value function — no critic — and the advantage weights every
-assistant token in that episode. Over the 2,400 rollouts already sampled for DPO it keeps **597
+The group mean replaces a learned value function, so there is no critic, and the advantage
+weights every assistant token in that episode. Over the 2,400 rollouts already sampled for DPO it keeps **597
 of 600 groups (2,388 episodes)** against **435 DPO pairs from the same data**: 5.5× the training
 signal, because a preference pair keeps one best/worst couple above a margin while a group uses
 the whole reward distribution.
 
 Trained for 149 optimizer steps. KL to the frozen SFT reference drifts 0.011 → 0.022 (max
-0.038), and 21 of 2,388 episodes hit the 12,288-token cap — 0.88%, against 1.2% predicted from
-a length sample before the cap was chosen. The policy-gradient term is near-evenly signed across
+0.038), and 21 of 2,388 episodes hit the 12,288-token cap, which is 0.88% against the 1.2%
+predicted from a length sample before the cap was chosen. The policy-gradient term is near-evenly signed across
 logged steps (15 negative, 14 positive, mean −0.14), which is the *correct* signature for this
 objective rather than a problem: advantages are zero-mean within a group, so over complete
 groups the expected term sits near zero and the learning signal is the correlation between
 advantage and log-probability. "Loss went down" is the wrong health check here.
 
-At full power it lands at 44.2% resolution against the matched SFT's 42.1% — inside the seed
-floor, like every other method in the grid.
+At full power it lands at 44.2% resolution against the matched SFT's 42.1%, inside the seed
+floor like every other method in the grid.
 
 ## Known limitations
 
@@ -446,12 +448,12 @@ Stated because a limitation you can name is worth more than one a reader finds.
 
 - **The expert is formulaic.** SFT reaches eval-loss 0.0215 partly because scripted
   demonstrations follow a fixed investigation order per fault family. Low loss here indicates
-  format acquisition, not diagnostic skill — which is why the OOD and perturbation tables, not
-  the loss curve, are the result.
+  format acquisition, not diagnostic skill. That is why the OOD and perturbation tables, rather
+  than the loss curve, are the result.
 - **Simulated workload physics.** Pod status is computed, not observed. Fidelity is verified on
   the process layer (5/5) and asserted per fault family; it is not a claim about a production
   cluster.
-- **Post-training regresses on held-out fault families** — 38.2% against base's 65.8% at
+- **Post-training regresses on held-out fault families**: 38.2% against base's 65.8% at
   n = 2,200. Diagnosed to label-prior collapse and reversible at serving time, but the sweep
   does not locate an optimum, and the held-out axis is two fault families.
 - **Every method arm is a single training run.** With a 3.1 pp seed floor and method effects of
@@ -473,4 +475,4 @@ Stated because a limitation you can name is worth more than one a reader finds.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+Released under the MIT License. See [LICENSE](LICENSE).

@@ -27,3 +27,7 @@ env.local.sh
 .claude/
 Session_Handoff.txt
 restore_deleted_models.sh
+
+# Positioning/provenance notes: kept on disk, deliberately not published.
+POSITIONING.md
+archive/

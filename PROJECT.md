@@ -14,14 +14,14 @@
 
 This is the design spec and the contract for what "done" means. It supersedes the original
 brainstorm (`project_idea.txt`, kept for provenance). Section 1 records the four design changes
-made against that brainstorm and why each one matters — those changes are the difference between a
+made against that brainstorm and why each one matters. Those changes are the difference between a
 project that can be finished and one that stalls at 70%.
 
 ---
 
 ## 1. Four changes from the original plan
 
-### 1.1 The environment is a simulator on a real API server — not a real workload cluster
+### 1.1 The environment is a simulator on a real API server, not a real workload cluster
 
 **The original plan assumed real pods crashing in a real cluster.** That is wrong on two independent
 grounds, and the second one would still be wrong on a cloud budget:
@@ -31,7 +31,7 @@ grounds, and the second one would still be wrong on a cloud budget:
    can start.
 2. *It is the wrong environment for post-training even where it is buildable.* Post-training needs
    **thousands of resettable, seeded, parallel episodes with verifiable rewards**. A real cluster
-   gives episodes that take minutes, never reset cleanly, and are nondeterministic — so the same
+   gives episodes that take minutes, never reset cleanly, and are nondeterministic, so the same
    action yields different rewards on different runs, which is fatal for DPO preference pairs and
    for GRPO advantage estimates.
 
@@ -41,17 +41,13 @@ anyway:
 | Layer | Real or simulated | Why |
 | --- | --- | --- |
 | `etcd` + `kube-apiserver` + `kube-controller-manager` + `kube-scheduler` | **Real**, run as user-space processes | Real object semantics, real CRDs, real RBAC, real admission, real watch/reconcile. The MCP tools and the operator talk to a genuine Kubernetes API. |
-| kubelet / container runtime | **Simulated** (`kubelet_sim`) | Pod status is *computed* from declarative workload physics — resource fit, image validity, config/secret presence, probe config. Deterministic and instant. |
+| kubelet / container runtime | **Simulated** (`kubelet_sim`) | Pod status is *computed* from declarative workload physics: resource fit, image validity, config/secret presence, probe config. Deterministic and instant. |
 | Application traffic, health, metrics, logs | **Simulated** (`mesh`, `metrics`, `logs`) | Health and SLOs are a pure function of cluster state, so the verifier is executable and exact. |
 
 This is not a shortcut around the hard part; it *is* the hard part. It buys sub-second resets,
 hundreds of parallel episodes per node, bit-exact reproducibility from a seed, and rewards that are
 computed rather than judged. Section 8 validates that the simulator's fault semantics match a real
 cluster.
-
-**Interview framing:** *"I ran a real Kubernetes control plane and replaced the kubelet with a
-deterministic workload simulator, because post-training needs a resettable environment with
-verifiable rewards, not a flaky one."*
 
 ### 1.2 Tool-schema robustness is promoted to the headline result
 
@@ -64,7 +60,7 @@ required argument, or starts returning malformed JSON. That is the result worth 
 
 The original treated GRPO as a nice-to-have at the end. Once §1.1 gives a deterministic simulator
 with executable rewards, on-policy RL becomes *the natural thing to do* rather than an expensive
-add-on — the reward function already exists and the environment already resets. It is also the
+add-on, because the reward function already exists and the environment already resets. It is also the
 single highest-signal item for research-engineer and post-training roles. It ships in the core.
 
 ### 1.4 Scope is cut so the core actually finishes
@@ -122,7 +118,7 @@ evaluation become next round's training data.
 ### 3.1 Control plane
 
 `agentgym.cluster.controlplane` starts a real, single-tenant Kubernetes control plane as ordinary
-user processes — `etcd` on a private data dir, `kube-apiserver` with a self-signed CA and RBAC
+user processes: `etcd` on a private data dir, `kube-apiserver` with a self-signed CA and RBAC
 enabled, plus `kube-controller-manager` and `kube-scheduler`. No root, no containers, no ports below
 1024. Each worker gets its own control plane on its own port range, so N episodes run in parallel on
 one node with zero cross-talk.
@@ -147,7 +143,7 @@ deterministic state machine, not a random fault generator:
 ### 3.3 Service mesh, metrics, logs
 
 `mesh` computes Endpoints from label selectors and pod readiness, then runs a synthetic traffic model
-over the topology to produce request success rate and latency — so "is the service healthy" is a
+over the topology to produce request success rate and latency, so "is the service healthy" is a
 computed fact. `metrics` emits Prometheus-shaped series derived from that state (p50/p95 latency,
 error rate, restart count, GPU memory, KV-cache utilization, queue depth). `logs` emits seeded,
 templated container logs consistent with the injected fault, so reading logs is genuinely
@@ -170,16 +166,16 @@ produces 1,000+ instances with held-out splits (§6).
 
 Four MCP servers over the real protocol, 36 typed tools, every argument schema-validated:
 
-- **`mcp-kubernetes`** — `list_pods`, `describe_pod`, `get_pod_logs`, `list_events`,
-  `get_deployment`, `patch_deployment_resources`*, `scale_deployment`*, `set_image`*,
+- **`mcp-kubernetes`**: `list_pods`, `describe_pod`, `get_pod_logs`, `list_events`,
+  `get_deployment`: `patch_deployment_resources`*, `scale_deployment`*, `set_image`*,
   `rollout_restart`*, `delete_pod`†
-- **`mcp-observability`** — `query_metrics` (PromQL-lite), `get_service_health`, `get_slo_status`,
-  `trace_request`, `list_alerts`
-- **`mcp-config`** — `get_configmap`, `patch_configmap`*, `get_secret_meta` (metadata only — never
+- **`mcp-observability`**: `query_metrics` (PromQL-lite), `get_service_health`, `get_slo_status`,
+  `trace_request`: `list_alerts`
+- **`mcp-config`**: `get_configmap`, `patch_configmap`*, `get_secret_meta` (metadata only, and never
   returns values), `get_service`, `patch_service_selector`*, `get_networkpolicy`,
   `patch_networkpolicy`*, `get_resourcequota`, `patch_resourcequota`*
-- **`mcp-knowledge`** — `search_runbooks`, `get_runbook`, `get_service_topology`,
-  `get_recent_changes` (deploy history — often contains the actual culprit)
+- **`mcp-knowledge`**: `search_runbooks`, `get_runbook`, `get_service_topology`,
+  `get_recent_changes` (deploy history, which often contains the actual culprit)
 
 `*` = mutating, `†` = destructive (requires approval under the default permission policy).
 Terminal action: `submit_diagnosis(root_cause, summary)`.
@@ -189,7 +185,7 @@ Terminal action: `submit_diagnosis(root_cause, summary)`.
 A gateway-level transform, parameterized by kind and severity, applied at episode start:
 tool **rename**, description **paraphrase**, **added required argument**, argument **retyping**,
 argument **nesting/reordering**, **distractor tools** (k near-duplicates), tool **dropout**,
-**malformed responses**, response **truncation**, injected **latency/timeout**, and **flaky**
+**malformed responses**: response **truncation**, injected **latency/timeout**, and **flaky**
 transient failures. This layer generates the OOD suite and is never seen during training unless a
 split explicitly enables it.
 
@@ -220,13 +216,13 @@ Weights are ablated (outcome-only / safety-aware / efficiency-aware / full) in �
 
 Three matrices, one per audience, all produced by the same runner.
 
-**Agent capability** — Resolution rate · Root-cause accuracy · Tool-selection F1 · Valid-argument
+**Agent capability**: Resolution rate · Root-cause accuracy · Tool-selection F1 · Valid-argument
 rate · Recovery rate · Unsafe-action rate, across Base / Prompted / SFT / SFT+DPO / SFT+GRPO.
 
-**Generalization** — In-distribution · Unseen fault family · Compositional (2 simultaneous faults) ·
+**Generalization**: In-distribution · Unseen fault family · Compositional (2 simultaneous faults) ·
 Schema shift (§4.1) · MCP server failure. This is the headline table.
 
-**Systems** — Throughput · TTFT · p95 episode latency · GPU utilization · KV-cache hit rate ·
+**Systems**: Throughput · TTFT · p95 episode latency · GPU utilization · KV-cache hit rate ·
 failover recovery time · GPU-hours and cost per 1k episodes, across Transformers / vLLM / SGLang /
 multi-LoRA / autoscaled configurations.
 
@@ -244,7 +240,7 @@ shared-prefix scaling (agent turns 2/5/10/20 × concurrency 1/8/32/64), structur
 (base + SFT + DPO adapters in one batch), and backend failover through a circuit-breaking gateway.
 
 The honest claim until the numbers are in is *"benchmarked vLLM and SGLang under multi-turn
-shared-prefix agent workloads"* — `outperforms` gets written only if measured.
+shared-prefix agent workloads"*, `outperforms` gets written only if measured.
 
 ---
 
@@ -254,13 +250,13 @@ The simulator is validated, not assumed. A subset of incident families is replay
 single-node Kubernetes cluster (k3s on a compute node, or a managed cluster if available), and we
 report per-family agreement on observable signals: pod phase and reason, event sequence, endpoint
 readiness, and whether the same remediation resolves it. Disagreements are reported rather than
-hidden — a fidelity table with known gaps is far more credible than a claim of realism.
+hidden. A fidelity table with known gaps is far more credible than a claim of realism.
 
 ---
 
 ## 9. Infrastructure
 
-**`IncidentRun` operator** (`agentgym.io/v1`) — a real controller against the real API server,
+**`IncidentRun` operator** (`agentgym.io/v1`): a real controller against the real API server,
 reconciling: create namespace → apply topology → inject fault → launch agent Job → collect
 trajectory → verify → update `status` → clean up. Demonstrates reconciliation, idempotency,
 finalizers, owner references, and retry/backoff.
@@ -291,34 +287,20 @@ Kubernetes for persistent serving, stateful agent execution, and isolated incide
 - [x] QLoRA SFT trained; DPO and GRPO trainers written, reward verified
 - [x] Base / SFT / DPO evaluation matrices across 4 splits and 7 tool-schema suites
 - [x] vLLM prefix-cache / structured-output / multi-LoRA benchmarks
-- [x] DPO run on mined preference pairs — twice, as a pair-count ablation (88 vs 435)
+- [x] DPO run on mined preference pairs, twice, as a pair-count ablation (88 vs 435)
 - [x] Episode-level GRPO trained and evaluated *(597/600 groups usable, 149 optimizer
       steps; 44.2% at n = 2,200, inside the 3.1 pp seed floor)*
 - [x] Action-level GRPO trained and evaluated *(43.0% at n = 2,200; also inside the floor)*
-- [x] Variance budget measured — learning rate, seed, and same-configuration
+- [x] Variance budget measured, learning rate, seed, and same-configuration
       nondeterminism separated, which is what makes the method effects readable
 - [ ] Several seeds per method arm *(the grid establishes that post-training works and
       cannot establish which method is best: every arm is one training run, and the
       run-to-run floor between independently trained models is 3.1 pp)*
 - [ ] SGLang **benchmarked against a live server** *(`SGLangBackend` is implemented
       and its interchangeability with `VLLMBackend` is asserted by
-      `tests/test_backend_pluggability.py` — identical request payload, identical
+      `tests/test_backend_pluggability.py`: identical request payload, identical
       parsing, no reimplementation. Not benchmarked: `sglang` needs a third
       environment and the home quota on this cluster is exhausted.)*
 - [ ] Node-layer sim-to-real fidelity *(process layer validated 5/5 against real
       processes, real `RLIMIT_AS` and real HTTP/TCP; the container layer has no
       real-runtime comparison and no fidelity claim is made for it)*
-
----
-
-## 11. Resume framing
-
-One title, three orderings. **MCP-AgentGym — Kubernetes-Native Agent Post-Training and Serving
-Platform.**
-
-- **Agent roles** — harness/MCP/verification first, then schema-shift robustness, then SFT/DPO, then serving.
-- **ML Infra roles** — control plane/operator/isolation first, then vLLM/SGLang and autoscaling, then Slurm, then the agent workload.
-- **Post-training roles** — trajectory dataset first, then SFT/DPO/GRPO, then reward and data ablations, then deployment.
-
-Bullets are written only once the numbers exist; no `[X]` placeholders survive into the final
-README.

@@ -1,6 +1,6 @@
 This file has been superseded.
 
-The original brainstorm is preserved verbatim at docs/original-brainstorm.txt.
+The original brainstorm is preserved verbatim at archive/original-brainstorm.txt.
 
 The project is now specified by three documents:
 

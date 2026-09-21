@@ -1,4 +1,4 @@
-# MCP-AgentGym — Design Document
+# MCP-AgentGym Design Document
 
 **Status:** working draft · **Version:** 0.1 · **Audience:** contributors and reviewers
 
@@ -26,7 +26,7 @@ simultaneously:
 
 A production Kubernetes cluster has none of them. Episodes take minutes, namespaces do
 not reset cleanly, timing is nondeterministic, and "is it fixed?" has no programmatic
-answer. The standard workaround — asking a strong model to grade transcripts — replaces a
+answer. The standard workaround, asking a strong model to grade transcripts, replaces a
 measurement with an opinion.
 
 MCP-AgentGym resolves this by **splitting the stack at the API boundary**, which is
@@ -79,14 +79,14 @@ exactly where an agent operates.
 └───────────────────────────────┬───────────────────────────────────────────────┘
                                 ▼
         ┌───────────────────────────────────────────────────────┐
-        │   MCP Gateway — schema validation · permission tiers   │
+        │   MCP Gateway · schema validation · permission tiers   │
         │   budgets · perturbation layer · call log              │
         └───┬───────────────┬───────────────┬───────────────┬───┘
             ▼               ▼               ▼               ▼
       mcp-kubernetes  mcp-observability  mcp-config   mcp-knowledge
                                 ▼
         ┌───────────────────────────────────────────────────────┐
-        │   Agent Harness — typed state · recovery · replay      │
+        │   Agent Harness · typed state · recovery · replay      │
         │   Policy: scripted expert │ LLM │ baseline             │
         └───────────────────────────┬───────────────────────────┘
                                     ▼
@@ -112,7 +112,7 @@ exactly where an agent operates.
 | Application traffic, health, metrics, logs | **Simulated** | Health becomes a pure function of cluster state, which is what makes the verifier exact. |
 
 Container runtimes are unavailable on the reference hardware (no root, no Docker, no
-`/etc/subuid` for rootless Podman), which forced this split — but it is the correct
+`/etc/subuid` for rootless Podman), which forced this split, but it is the correct
 architecture for post-training regardless of hardware, for the reasons in §1.
 
 ### 3.2 Concurrency model
@@ -144,11 +144,11 @@ mirrors kubelet precedence; the first matching condition wins:
 | 6 | A hard dependency is not serving | `CrashLoopBackOff` (dependency) |
 | 7 | Readiness probe targets the wrong path/port | `Running`, never `Ready` |
 | 8 | Still within boot budget | `Booting` |
-| — | otherwise | `RunningReady` |
+| *(any other)* | otherwise | `RunningReady` |
 
 Workload properties are declared as pod-template annotations (`agentgym.io/*`:
-`working-set-mi`, `boot-ticks`, `config-ref`, `secret-ref`, `health-path`, `health-port`,
-`depends-on`, `kv-cache-mi`).
+`working-set-mi`: `boot-ticks`, `config-ref`, `secret-ref`, `health-path`, `health-port`,
+`depends-on`: `kv-cache-mi`).
 
 The simulator also **reaps terminating pods**. That is not incidental: without it,
 namespaces never leave `Terminating`, deleted pods keep holding node capacity, and the
@@ -197,16 +197,16 @@ stateless tier by design; see §9 for why, and what that leaves on the table.
 
 36 typed tools across four MCP servers, each with a JSON Schema and a permission tier:
 
-- **`mcp-kubernetes`** — pod/deployment inspection, logs, events, and the mutating verbs
+- **`mcp-kubernetes`**: pod/deployment inspection, logs, events, and the mutating verbs
   (`patch_deployment_resources`, `scale_deployment`, `set_image`,
-  `patch_deployment_probe`, `patch_deployment_node_selector`,
-  `patch_deployment_secret_ref`, `rollout_restart`, `wait_for_rollout`, `delete_pod`†)
-- **`mcp-observability`** — `get_service_health`, `query_metrics` (PromQL-lite),
-  `get_slo_status`, `list_alerts`, `trace_request`
-- **`mcp-config`** — ConfigMaps, Service selectors, NetworkPolicies, ResourceQuotas, and
-  `get_secret_meta` (key names only — values are never returned, enforced by RBAC, not by
+  `patch_deployment_probe`: `patch_deployment_node_selector`,
+  `patch_deployment_secret_ref`: `rollout_restart`, `wait_for_rollout`, `delete_pod`†)
+- **`mcp-observability`**: `get_service_health`, `query_metrics` (PromQL-lite),
+  `get_slo_status`: `list_alerts`, `trace_request`
+- **`mcp-config`**: ConfigMaps, Service selectors, NetworkPolicies, ResourceQuotas, and
+  `get_secret_meta` (key names only; values are never returned, enforced by RBAC, not by
   prompt)
-- **`mcp-knowledge`** — runbooks, service topology, and deploy history
+- **`mcp-knowledge`**: runbooks, service topology, and deploy history
 
 `†` destructive; gated by policy. Terminal action: `submit_diagnosis(root_cause, summary)`.
 
@@ -220,7 +220,7 @@ back to canonical form. Schema perturbations: tool rename, description paraphras
 argument rename, added required argument, argument retyping, distractor tools. Transport
 perturbations: server dropout, malformed responses, truncation, flaky failures.
 
-**The catalog is rendered into the system prompt**, not passed as an API field. This is
+**The catalog is rendered into the system prompt**: not passed as an API field. This is
 load-bearing: a renamed tool must be renamed *in the text the model reads*, or the suite
 measures nothing.
 
@@ -283,7 +283,7 @@ score = 2.0·resolved + 0.5·root_cause_correct + 0.4·validated + 0.2·recovere
 
 Investigation below a threshold is free: reading logs before acting is correct behaviour,
 not waste. Four weightings ship for ablation: `outcome_only`, `safety_aware`,
-`efficiency_aware`, `full`.
+`efficiency_aware`: `full`.
 
 ### 6.3 Action reward (GRPO)
 
@@ -319,11 +319,11 @@ removed before the object is released), owner references, status-subresource wri
 
 Three matrices, produced by one runner from the same verified trajectories.
 
-1. **Capability** — resolution rate, root-cause accuracy, unsafe-action rate,
+1. **Capability**: resolution rate, root-cause accuracy, unsafe-action rate,
    invalid-call rate, tool calls, reward. Clean tool schemas.
-2. **Generalization** — by split: in-distribution, unseen fault family, unseen topology,
+2. **Generalization**: by split: in-distribution, unseen fault family, unseen topology,
    compositional (two simultaneous faults).
-3. **Systems** — throughput, latency percentiles, prefix-cache effect, structured-output
+3. **Systems**: throughput, latency percentiles, prefix-cache effect, structured-output
    validity, multi-LoRA cost.
 
 **Robustness** is reported as *retention*: resolution under a suite divided by that
@@ -335,7 +335,7 @@ generalization, `all suites × in-distribution` for robustness. The cross-produc
 cost ~2.8× more for cells neither table reads, and perturbing in-distribution isolates
 the tool-surface variable instead of confounding it with an unfamiliar fault.
 
-**Splits are held out by fault family and by topology**, and a contamination check asserts
+**Splits are held out by fault family and by topology**: and a contamination check asserts
 that no evaluation incident appears in any training trajectory.
 
 ---
@@ -344,15 +344,15 @@ that no evaluation incident appears in any training trajectory.
 
 Stated because a limitation you can name is worth more than one a reader discovers.
 
-- **Simulated workload physics — partially validated.** Pod status is computed, not
+- **Simulated workload physics: partially validated.** Pod status is computed, not
   observed. `agentgym/fidelity.py` narrows the gap by running each workload as a **real OS
   process** under a **real kernel-enforced memory limit** (`RLIMIT_AS`), serving a **real
   HTTP health endpoint**, with **real TCP dependency checks** and real startup config
-  validation — then requires the simulator to have predicted both the readiness and the
+  validation, then requires the simulator to have predicted both the readiness and the
   reason. Current agreement: **5/5 cases** (healthy, OOMKilled, BadConfigMap,
   ReadinessProbeMisconfig, CascadingDependencyDown).
 
-  This validates the **application layer** — what an agent actually observes through
+  This validates the **application layer**, what an agent actually observes through
   health, logs and metrics. It does **not** validate the node layer: image pull,
   scheduling, kubelet bookkeeping and anything needing a container runtime remain
   simulated and unvalidated, because no container runtime is available without root. Five
@@ -360,18 +360,17 @@ Stated because a limitation you can name is worth more than one a reader discove
   (quota, network policy, node loss, storage) have no real-process counterpart yet.
 - **Faults target the stateless tier.** A StatefulSet's RollingUpdate will not replace a
   pod that is not Running and Ready, so once its pod is wedged a template fix does not
-  roll out — real Kubernetes requires deleting the pod by hand. This is genuine behaviour
+  roll out, real Kubernetes requires deleting the pod by hand. This is genuine behaviour
   and deserves its own fault family; it is excluded today because it breaks the
   single-action fix/verify contract the other families rely on.
 - **The scripted expert is formulaic.** It follows a fixed investigation order per family.
-  Low SFT loss on its demonstrations indicates format acquisition, not diagnostic skill —
-  which is why the OOD and perturbation tables, not the loss curve, are the result.
+  Low SFT loss on its demonstrations indicates format acquisition, not diagnostic skill, which is why the OOD and perturbation tables, not the loss curve, are the result.
 - **Episode-level GRPO is implemented but not yet trained to a reported result.**
   `train/grpo_train.py` optimises one tool call at a time, because TRL's GRPOTrainer is
   single-turn; `train/episode_grpo.py` closes that with a custom loop that groups *G*
   rollouts of the same incident, standardises the verifiable episode reward within the
   group, and applies the resulting advantage to every assistant token in the episode. It
-  needs no critic and no live cluster — the existing sharded sampler supplies the groups,
+  needs no critic and no live cluster; the existing sharded sampler supplies the groups,
   and 597 of 600 incidents yield a usable one. Until a training run and its evaluation
   complete, **no number anywhere in this repository comes from it.**
 - **PromQL-lite.** `query_metrics` supports metric names and exact label matches only.
@@ -394,19 +393,18 @@ open_store("s3://bucket/prefix")  -> S3Store        # or AGENTGYM_ARTIFACT_URI
 agentgym publish --run <dir> --adapter <dir>
 ```
 
-**Deployment** (`deploy/helm/agentgym/values-eks.yaml`). An overlay on the existing chart —
-no template changes. It configures IRSA (the pod assumes a role directly, so no AWS keys
+**Deployment** (`deploy/helm/agentgym/values-eks.yaml`). An overlay on the existing chart, no template changes. It configures IRSA (the pod assumes a role directly, so no AWS keys
 are mounted, stored in a Secret, or baked into an image), a gp3 `StorageClass` on
-`ebs.csi.aws.com` for the datastore StatefulSets, and a `g6e.xlarge` nodeSelector — the
+`ebs.csi.aws.com` for the datastore StatefulSets, and a `g6e.xlarge` nodeSelector. The
 same L40S the serving numbers in the README were measured on, so those latencies transfer.
 
 ### What is verified, and what is not
 
 | | Status |
 | --- | --- |
-| `S3Store` boto3 call paths, key composition, pagination past 1,000 keys, missing-key errors | **Tested** against `moto`, which intercepts the AWS API inside botocore — the client code under test is real |
+| `S3Store` boto3 call paths, key composition, pagination past 1,000 keys, missing-key errors | **Tested** against `moto`, which intercepts the AWS API inside botocore. The client code under test is real |
 | Path-traversal rejection, tree upload/download, URI scheme dispatch | **Tested** |
-| EKS overlay renders the objects it documents — IRSA annotation, instance type, and the gp3 `StorageClass` with late binding | **Verified** by `tests/test_helm_render.py`, which renders the chart with and without the overlay and asserts what each must and must not contain. `helm lint` alone was not enough: it passed for weeks while the `aws.storageClass` block in `values-eks.yaml` was consumed by no template and the StorageClass never rendered. Linting proves a chart is well-formed; only rendering proves it does anything. |
+| EKS overlay renders the objects it documents: IRSA annotation, instance type, and the gp3 `StorageClass` with late binding | **Verified** by `tests/test_helm_render.py`, which renders the chart with and without the overlay and asserts what each must and must not contain. `helm lint` alone was not enough: it passed for weeks while the `aws.storageClass` block in `values-eks.yaml` was consumed by no template and the StorageClass never rendered. Linting proves a chart is well-formed; only rendering proves it does anything. |
 | Behaviour against a live AWS account: IAM policy, bucket policy, network, EKS admission | **Not verified.** No deployment to real AWS has been performed. |
 
 The last row is the reason this section exists. A green test suite over `moto` proves the
@@ -448,7 +446,7 @@ results rather than stop them.
 | --- | --- |
 | **Episode** | One incident, in one namespace, from injection to verification. |
 | **Fault family** | A class of failure with an injection, a root-cause label, a resolution predicate, and a safety policy. |
-| **Incident instance** | `(family, topology, parameters, seed)` — fully reproducible. |
+| **Incident instance** | `(family, topology, parameters, seed)`, and fully reproducible. |
 | **Verdict** | The simulated kubelet's decision about a pod. |
 | **Suite** | A named perturbation configuration applied to the tool surface. |
 | **Retention** | Resolution under a suite ÷ that variant's clean resolution. |

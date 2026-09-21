@@ -1,0 +1,1126 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MCP-AgentGym: a verifiable Kubernetes incident gym for post-training agents</title>
+<meta name="description" content="A real Kubernetes control plane with a deterministic workload simulator, executable rewards, and a measured variance budget for post-training tool-using agents.">
+<meta property="og:title" content="MCP-AgentGym">
+<meta property="og:description" content="Post-training on a closed catalogue is a trade, not an improvement, and it is reversible at serving time.">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Source+Serif+4:opsz,wght@8..60,380;8..60,400;8..60,600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme: light;
+  --bg:#faf9f5; --bg-2:#f2f0e9; --bg-3:#e9e6dc;
+  --surface:#fffefb; --surface-2:#f6f4ed;
+  --ink:#191917; --ink-2:#4a4844; --ink-3:#78746c;
+  --rule:#e0dcd1; --rule-2:#cdc7b8;
+  --s1:#c15f3c; --s2:#3060a8; --s3:#1f8f6a;
+  --s1-wash:rgba(193,95,60,.10); --s2-wash:rgba(48,96,168,.10);
+  --neutral:#a39d90;
+  --accent:#c15f3c;
+  --serif:"Source Serif 4",Iowan Old Style,Palatino,Georgia,serif;
+  --sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme: dark;
+    --bg:#1a1918; --bg-2:#222120; --bg-3:#2b2926;
+    --surface:#211f1e; --surface-2:#282624;
+    --ink:#f2efe8; --ink-2:#bdb8ae; --ink-3:#928d83;
+    --rule:#343230; --rule-2:#454240;
+    --s1:#d4764e; --s2:#4f8cd6; --s3:#149c74;
+    --s1-wash:rgba(212,118,78,.13); --s2-wash:rgba(79,140,214,.13);
+    --neutral:#6a655d;
+    --accent:#d4764e;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --bg:#1a1918; --bg-2:#222120; --bg-3:#2b2926;
+  --surface:#211f1e; --surface-2:#282624;
+  --ink:#f2efe8; --ink-2:#bdb8ae; --ink-3:#928d83;
+  --rule:#343230; --rule-2:#454240;
+  --s1:#d4764e; --s2:#4f8cd6; --s3:#149c74;
+  --s1-wash:rgba(212,118,78,.13); --s2-wash:rgba(79,140,214,.13);
+  --neutral:#6a655d;
+  --accent:#d4764e;
+}
+
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:var(--sans); font-size:16.5px; line-height:1.65;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+}
+img{max-width:100%}
+a{color:inherit}
+h1,h2,h3,h4{font-family:var(--serif); font-weight:400; letter-spacing:-.012em; line-height:1.18; margin:0}
+.mono{font-family:var(--mono)}
+
+/* ---------- layout ---------- */
+.wrap{max-width:1120px; margin:0 auto; padding-inline:24px}
+.prose{max-width:680px}
+section{padding-block:clamp(56px,8vw,104px); border-top:1px solid var(--rule)}
+section:first-of-type{border-top:0}
+.eyebrow{
+  font-size:11.5px; font-weight:600; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--ink-3); margin-bottom:20px; display:flex; align-items:center; gap:10px;
+}
+.eyebrow::before{content:""; width:20px; height:1px; background:var(--rule-2); flex:none}
+h2{font-size:clamp(28px,4.2vw,40px); margin-bottom:20px}
+h3{font-size:clamp(20px,2.6vw,24px); margin-bottom:12px}
+p{margin:0 0 18px}
+.lede{font-size:clamp(17px,2vw,19px); color:var(--ink-2); line-height:1.62}
+strong{font-weight:600; color:var(--ink)}
+em{font-style:italic}
+
+/* ---------- nav ---------- */
+nav{
+  position:sticky; top:0; z-index:50; background:color-mix(in srgb,var(--bg) 88%,transparent);
+  backdrop-filter:saturate(180%) blur(12px); border-bottom:1px solid var(--rule);
+}
+nav .wrap{display:flex; align-items:center; gap:18px; height:58px}
+.brand{font-family:var(--serif); font-size:17px; letter-spacing:-.01em; text-decoration:none; white-space:nowrap}
+.brand b{font-weight:600}
+.navlinks{display:flex; gap:22px; margin-left:auto; align-items:center}
+.navlinks a{
+  font-size:13.5px; color:var(--ink-2); text-decoration:none; padding-block:4px;
+  border-bottom:1px solid transparent; transition:color .15s,border-color .15s;
+}
+.navlinks a:hover{color:var(--ink); border-bottom-color:var(--accent)}
+@media (max-width:760px){ .navlinks a.hide-sm{display:none} }
+.themebtn{
+  appearance:none; border:1px solid var(--rule-2); background:transparent; color:var(--ink-2);
+  width:30px; height:30px; border-radius:50%; cursor:pointer; display:grid; place-items:center;
+  font-size:13px; line-height:1; transition:border-color .15s,color .15s;
+}
+.themebtn:hover{border-color:var(--accent); color:var(--accent)}
+
+/* ---------- hero ---------- */
+.hero{padding-block:clamp(60px,10vw,120px) clamp(44px,6vw,72px)}
+.hero h1{font-size:clamp(40px,7.4vw,74px); letter-spacing:-.028em; line-height:1.04; margin-bottom:26px}
+.hero h1 .quiet{color:var(--ink-3)}
+.hero .lede{max-width:660px; font-size:clamp(17px,2.2vw,20px)}
+.tagrow{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:28px}
+.tag{
+  font-size:11.5px; font-family:var(--mono); letter-spacing:.02em; color:var(--ink-2);
+  border:1px solid var(--rule-2); border-radius:999px; padding:4px 11px; background:var(--surface);
+}
+.cta{display:flex; flex-wrap:wrap; gap:12px; margin-top:32px}
+.btn{
+  display:inline-flex; align-items:center; gap:8px; text-decoration:none; font-size:14.5px;
+  font-weight:500; padding:11px 20px; border-radius:7px; border:1px solid transparent;
+  transition:transform .12s ease, background .15s, border-color .15s;
+}
+.btn:active{transform:translateY(1px)}
+.btn-primary{background:var(--accent); color:#fffefb; border-color:var(--accent)}
+.btn-primary:hover{background:color-mix(in srgb,var(--accent) 86%,#000)}
+.btn-ghost{border-color:var(--rule-2); color:var(--ink)}
+.btn-ghost:hover{border-color:var(--ink-3); background:var(--surface)}
+
+/* ---------- stat strip ---------- */
+.stats{
+  display:grid; grid-template-columns:repeat(auto-fit,minmax(158px,1fr));
+  border:1px solid var(--rule); border-radius:12px; overflow:hidden; background:var(--surface);
+  margin-top:44px;
+}
+.stat{padding:20px 22px; border-right:1px solid var(--rule)}
+.stat:last-child{border-right:0}
+@media (max-width:900px){ .stat{border-bottom:1px solid var(--rule)} }
+.stat .v{font-family:var(--serif); font-size:clamp(26px,3.4vw,33px); line-height:1.1; letter-spacing:-.02em}
+.stat .k{font-size:12.5px; color:var(--ink-3); margin-top:6px; line-height:1.4}
+
+/* ---------- figure / chart ---------- */
+figure{margin:0 0 8px}
+.card{
+  background:var(--surface); border:1px solid var(--rule); border-radius:12px;
+  padding:clamp(20px,3vw,30px);
+}
+.figtitle{font-size:16px; font-weight:600; letter-spacing:-.005em; margin-bottom:4px}
+.figsub{font-size:13.5px; color:var(--ink-3); margin-bottom:22px; line-height:1.5}
+.legend{display:flex; flex-wrap:wrap; gap:18px; margin-bottom:18px}
+.lg{display:flex; align-items:center; gap:7px; font-size:13px; color:var(--ink-2)}
+.lg i{width:11px; height:11px; border-radius:3px; display:block; flex:none}
+.lg.line i{height:3px; width:16px; border-radius:2px}
+.chart{width:100%; overflow:visible}
+.chart text{font-family:var(--sans)}
+.ax{fill:var(--ink-3); font-size:12px}
+.axlab{fill:var(--ink-3); font-size:11.5px; letter-spacing:.03em}
+.vlab{fill:var(--ink); font-size:12.5px; font-weight:600}
+.grid line{stroke:var(--rule); stroke-width:1}
+.baseline{stroke:var(--rule-2); stroke-width:1}
+.hit{fill:transparent; cursor:pointer}
+.tip{
+  position:fixed; pointer-events:none; z-index:80; opacity:0; transition:opacity .1s;
+  background:var(--ink); color:var(--bg); font-size:12.5px; line-height:1.5;
+  padding:8px 11px; border-radius:7px; max-width:250px; box-shadow:0 6px 24px rgba(0,0,0,.18);
+}
+.tip b{font-weight:600; color:var(--bg)}
+.tip .dim{opacity:.72}
+.tbtn{
+  appearance:none; background:none; border:0; border-bottom:1px dotted var(--rule-2);
+  color:var(--ink-3); font-family:var(--sans); font-size:12.5px; cursor:pointer;
+  padding:0 0 2px; margin-top:18px;
+}
+.tbtn:hover{color:var(--accent); border-bottom-color:var(--accent)}
+.tblwrap{overflow-x:auto; margin-top:16px}
+figcaption{font-size:13px; color:var(--ink-3); line-height:1.55; margin-top:16px; max-width:660px}
+
+/* ---------- tables ---------- */
+table{border-collapse:collapse; width:100%; font-size:13.5px}
+th,td{text-align:right; padding:9px 12px; border-bottom:1px solid var(--rule); white-space:nowrap}
+th:first-child,td:first-child{text-align:left; white-space:normal}
+thead th{
+  font-size:11px; font-weight:600; letter-spacing:.07em; text-transform:uppercase;
+  color:var(--ink-3); border-bottom:1px solid var(--rule-2);
+}
+tbody tr:last-child td{border-bottom:0}
+td.num{font-family:var(--mono); font-size:12.5px; font-variant-numeric:tabular-nums}
+tr.hi td{background:var(--s1-wash)}
+tr.hi td:first-child{font-weight:600}
+.dimrow td{color:var(--ink-3)}
+
+/* ---------- misc blocks ---------- */
+.grid2{display:grid; grid-template-columns:1fr 1fr; gap:22px}
+.grid3{display:grid; grid-template-columns:repeat(3,1fr); gap:20px}
+@media (max-width:860px){ .grid2,.grid3{grid-template-columns:1fr} }
+.note{
+  border-left:2px solid var(--accent); padding:2px 0 2px 20px; margin:26px 0;
+  color:var(--ink-2); font-size:15.5px;
+}
+.trade{
+  display:grid; grid-template-columns:1fr 1fr; gap:0; border:1px solid var(--rule);
+  border-radius:12px; overflow:hidden; margin:30px 0; background:var(--surface);
+}
+@media (max-width:700px){ .trade{grid-template-columns:1fr} }
+.trade > div{padding:24px 26px}
+.trade .buys{border-right:1px solid var(--rule)}
+@media (max-width:700px){ .trade .buys{border-right:0; border-bottom:1px solid var(--rule)} }
+.trade h4{font-size:12px; font-family:var(--sans); font-weight:600; letter-spacing:.1em;
+  text-transform:uppercase; color:var(--ink-3); margin-bottom:16px}
+.tline{display:flex; justify-content:space-between; gap:16px; align-items:baseline; padding-block:7px}
+.tline + .tline{border-top:1px solid var(--rule)}
+.tline .l{font-size:14px; color:var(--ink-2)}
+.tline .r{font-family:var(--mono); font-size:14px; font-weight:500; white-space:nowrap}
+.pos{color:var(--s1)} .neg{color:var(--s2)}
+.z{font-family:var(--mono); font-size:11.5px; color:var(--ink-3); margin-left:7px}
+
+pre{
+  background:var(--surface-2); border:1px solid var(--rule); border-radius:10px;
+  padding:18px 20px; overflow-x:auto; font-family:var(--mono); font-size:12.5px;
+  line-height:1.7; color:var(--ink-2); margin:0 0 18px;
+}
+code{font-family:var(--mono); font-size:.9em; background:var(--bg-2); padding:1.5px 5px;
+  border-radius:4px; color:var(--ink)}
+pre code{background:none; padding:0; font-size:inherit}
+
+.retract{border:1px solid var(--rule); border-radius:12px; overflow:hidden; background:var(--surface)}
+.retract .r-row{display:grid; grid-template-columns:minmax(0,320px) 1fr; gap:0; border-top:1px solid var(--rule)}
+.retract .r-row:first-child{border-top:0}
+@media (max-width:760px){ .retract .r-row{grid-template-columns:1fr} }
+.r-claim{padding:18px 22px; font-size:14.5px; color:var(--ink-3); text-decoration:line-through;
+  text-decoration-color:var(--rule-2); border-right:1px solid var(--rule)}
+@media (max-width:760px){ .r-claim{border-right:0; padding-bottom:0} }
+.r-truth{padding:18px 22px; font-size:14.5px; color:var(--ink-2)}
+
+.layers{border:1px solid var(--rule); border-radius:12px; overflow:hidden; background:var(--surface)}
+.layer{display:grid; grid-template-columns:minmax(0,1.1fr) 92px minmax(0,1.5fr); gap:0;
+  align-items:center; border-top:1px solid var(--rule); padding:16px 22px; font-size:14px}
+.layer:first-child{border-top:0}
+@media (max-width:760px){ .layer{grid-template-columns:1fr; gap:6px} }
+.pill{font-size:11px; font-family:var(--mono); letter-spacing:.04em; padding:3px 9px;
+  border-radius:999px; justify-self:start; white-space:nowrap}
+.pill.real{background:var(--s3); color:#fff}
+.pill.sim{background:var(--bg-3); color:var(--ink-2)}
+.layer .why{color:var(--ink-3); font-size:13.5px; line-height:1.5}
+
+footer{border-top:1px solid var(--rule); padding-block:44px 56px; color:var(--ink-3); font-size:13.5px}
+footer a{color:var(--ink-2); text-decoration:none; border-bottom:1px solid var(--rule-2)}
+footer a:hover{color:var(--accent); border-bottom-color:var(--accent)}
+.flinks{display:flex; flex-wrap:wrap; gap:22px; margin-bottom:22px}
+.sr{position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top">MCP-<b>AgentGym</b></a>
+    <div class="navlinks">
+      <a href="#result">Result</a>
+      <a href="#reversal" class="hide-sm">Reversal</a>
+      <a href="#variance">Variance</a>
+      <a href="#how" class="hide-sm">How it works</a>
+      <a href="#rigor">Rigour</a>
+      <a href="https://github.com/yupengtang/MCP-AgentGym">GitHub</a>
+      <button class="themebtn" id="theme" title="Toggle theme" aria-label="Toggle colour theme">◐</button>
+    </div>
+  </div>
+</nav>
+
+<main id="top">
+
+<!-- ================= HERO ================= -->
+<section class="hero">
+  <div class="wrap">
+    <div class="tagrow">
+      <span class="tag">Real Kubernetes control plane</span>
+      <span class="tag">36 typed MCP tools</span>
+      <span class="tag">SFT · DPO · GRPO</span>
+      <span class="tag">Qwen3-8B</span>
+    </div>
+    <h1>Post-training an agent<br>is a trade,<br><span class="quiet">not an improvement.</span></h1>
+    <p class="lede">
+      MCP-AgentGym runs a real Kubernetes control plane with a deterministic workload
+      simulator, so an agent's work can be graded by reading live cluster state instead of
+      by another model. Across eight training arms and 2,200 episodes each, what
+      post-training buys and what it costs are both large, both significant, and both
+      bigger than every difference between the methods themselves.
+    </p>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://github.com/yupengtang/MCP-AgentGym">View the repository →</a>
+      <a class="btn btn-ghost" href="#result">Read the result</a>
+    </div>
+
+    <div class="stats">
+      <div class="stat"><div class="v">11,541</div><div class="k">trajectories executed and programmatically verified</div></div>
+      <div class="stat"><div class="v">2.4 s</div><div class="k">median episode on CPU; the environment needs no GPU</div></div>
+      <div class="stat"><div class="v">0</div><div class="k">unsafe actions across 3,840 post-trained episodes</div></div>
+      <div class="stat"><div class="v">140</div><div class="k">tests, including 14 fault families that must break <em>and</em> fix</div></div>
+      <div class="stat"><div class="v">5</div><div class="k">of this project's own published claims, retracted</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= RESULT ================= -->
+<section id="result">
+  <div class="wrap">
+    <div class="eyebrow">The headline result</div>
+    <div class="prose">
+      <h2>Training buys capability inside the catalogue and spends it outside</h2>
+      <p class="lede">
+        Every model is evaluated on 5,000 incidents none of them has seen, at
+        <span class="mono">n&nbsp;=&nbsp;2,200</span> per arm, with zero id overlap with training.
+        The Bonferroni threshold for the 42 comparisons reported is <span class="mono">z&nbsp;&gt;&nbsp;3.0</span>.
+      </p>
+      <p>
+        The untrained base model is the <em>best</em> agent in this project on fault families it
+        was never trained for, and the worst everywhere else. That is not a small effect
+        being over-read: both directions clear significance by a wide margin, and both are
+        several times larger than any difference between SFT, DPO and the two GRPO variants.
+      </p>
+    </div>
+
+    <figure class="card" style="margin-top:34px">
+      <div class="figtitle">Resolution rate by evaluation split</div>
+      <div class="figsub">Share of incidents actually fixed, judged by the executable verifier reading live cluster state. n = 2,200 per arm.</div>
+      <div class="legend" id="lg-trade"></div>
+      <svg class="chart" id="c-trade" role="img" aria-label="Grouped bar chart: the untrained base leads on held-out fault families at 65.8% while the trained model leads on all three other splits."></svg>
+      <button class="tbtn" data-table="t-trade">Show the numbers</button>
+      <div class="tblwrap" id="t-trade" hidden></div>
+      <figcaption>
+        <strong>Held-out faults is the only split where training loses</strong>, and it loses by
+        27.6 pp (z = −19.06) against a 16.2 pp overall gain (z = +10.96). Invalid tool calls
+        collapse from 26.3% to 0.3% in the same move, a ~100× effect that nothing else in the
+        project comes near.
+      </figcaption>
+    </figure>
+
+    <div class="trade">
+      <div class="buys">
+        <h4>What training buys</h4>
+        <div class="tline"><span class="l">Resolution</span><span class="r pos">+16.2 pp<span class="z">z = +10.96</span></span></div>
+        <div class="tline"><span class="l">Root-cause accuracy</span><span class="r pos">+14.2 pp<span class="z">z = +9.57</span></span></div>
+        <div class="tline"><span class="l">Invalid tool calls</span><span class="r pos">26.3% → 0.3%<span class="z">~100×</span></span></div>
+      </div>
+      <div>
+        <h4>What it costs</h4>
+        <div class="tline"><span class="l">Held-out fault families</span><span class="r neg">−27.6 pp<span class="z">z = −19.06</span></span></div>
+        <div class="tline"><span class="l">Never-demonstrated labels</span><span class="r neg">5.0% → 0.0%<span class="z">0 / 599</span></span></div>
+        <div class="tline"><span class="l">Reversible after training?</span><span class="r pos">Yes<span class="z">see below</span></span></div>
+      </div>
+    </div>
+
+    <div class="prose">
+      <h3>The mechanism is countable, not speculative</h3>
+      <p>
+        Fine-tuning drives the two never-demonstrated diagnosis labels to <strong>0 emissions in
+        599 submissions</strong>, against the base model's 25 in 501. Both labels sit in the
+        <code>submit_diagnosis</code> enum and in the system prompt on <em>every</em> episode. The
+        trained models are not blind to them; they can no longer reach them. What they emit
+        instead is confidently wrong and drawn from the training catalogue: it answers
+        <code>readiness_probe_targets_wrong_endpoint</code> for 17 of 32 <code>NodeNotReady</code>
+        incidents.
+      </p>
+      <div class="note">
+        That is <strong>label-prior collapse</strong>, not degraded reasoning, and the distinction
+        decides the fix. Degraded reasoning needs better data. A collapsed prior needs the
+        update attenuated.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= REVERSAL ================= -->
+<section id="reversal">
+  <div class="wrap">
+    <div class="eyebrow">The reversal</div>
+    <div class="prose">
+      <h2>One knob, applied at serving time, undoes the trade</h2>
+      <p class="lede">
+        A LoRA update enters each layer as <span class="mono">ΔW = (α/r)·B@A</span>, so scaling
+        <code>lora_B</code> by <span class="mono">s</span> scales the update exactly.
+        <span class="mono">s = 0</span> is the base model, <span class="mono">s = 1</span> the
+        trained one, and every value between is servable from a single engine by multi-LoRA.
+      </p>
+      <p>
+        No retraining, no second checkpoint, no data collection. The specialization the model
+        acquired is a magnitude, and magnitude is a dial you can still turn after training has
+        finished.
+      </p>
+    </div>
+
+    <figure class="card" style="margin-top:34px">
+      <div class="figtitle">Held-out resolution against adapter scale <span class="mono" style="font-weight:400;color:var(--ink-3)">s</span></div>
+      <div class="figsub">Two independently trained adapter families, different objectives and different data, scaled the same way.</div>
+      <div class="legend" id="lg-atten"></div>
+      <svg class="chart" id="c-atten" role="img" aria-label="Line chart: held-out resolution rises monotonically as the LoRA update is scaled down, from 36.7% at s=1.0 to 72.5% at s=0.5, replicated on a second adapter family."></svg>
+      <button class="tbtn" data-table="t-atten">Show the numbers</button>
+      <div class="tblwrap" id="t-atten" hidden></div>
+      <figcaption>
+        Monotone at every step, both adjacent comparisons significant (z = 3.55, z = 2.22),
+        <strong>z = 5.97 end-to-end</strong>, and <strong>no measurable in-distribution cost</strong>
+        (67.2% at s = 0.5 against 65.6% at s = 1.0, z = 0.27). The DPO and SFT families were trained
+        by different objectives on different data, and they collapse the same way and recover to
+        within 1.6 pp of each other. That is the best evidence available here that what matters is
+        the <em>size</em> of the update rather than anything particular to one checkpoint.
+      </figcaption>
+    </figure>
+
+    <div class="prose">
+      <p style="margin-top:34px">
+        <strong>What it does not establish.</strong> The sweep does not locate an optimum, and the
+        held-out axis is two fault families. A first pass predicted an in-distribution dip at
+        s = 0.75 that a powered confirmation run failed to reproduce. It halved and stayed
+        non-significant, which is textbook regression to the mean, and it was written down as a
+        caveat when that job was submitted rather than after it came back.
+      </p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= VARIANCE ================= -->
+<section id="variance">
+  <div class="wrap">
+    <div class="eyebrow">The variance budget</div>
+    <div class="prose">
+      <h2>The learning rate mattered more than every method tested</h2>
+      <p class="lede">
+        Before any method comparison means anything, you have to know what the same recipe does
+        to itself. Every source of variation this project can measure, at
+        <span class="mono">n = 2,200</span> per arm on the same 5,000 fresh incidents:
+      </p>
+    </div>
+
+    <figure class="card" style="margin-top:34px">
+      <div class="figtitle">Change in resolution rate, by source of variation</div>
+      <div class="figsub">The shaded band is the 3.1 pp floor between independently trained models. Anything inside it is not distinguishable from reseeding.</div>
+      <svg class="chart" id="c-var" role="img" aria-label="Diverging bar chart: the learning rate change moves resolution by +14.23 points, far beyond every post-training method, three of which fall inside the 3.1 point seed floor."></svg>
+      <button class="tbtn" data-table="t-var">Show the numbers</button>
+      <div class="tblwrap" id="t-var" hidden></div>
+      <figcaption>
+        Same seed, same corpus, same epochs: moving the learning rate from 5e-5 to 1e-4 is worth
+        <strong>+14.2 pp</strong> resolution and <strong>+10.4 pp</strong> root cause, and drops
+        invalid calls from 0.59% to 0.01%. The published baseline every method in this project
+        was measured against had been trained at the slower one.
+      </figcaption>
+    </figure>
+
+    <div class="grid2" style="margin-top:34px">
+      <div class="prose">
+        <h3>Two floors, and the wrong one is easy to reach for</h3>
+        <p>
+          Two runs of the <em>same</em> configuration differ by <strong>0.2 pp</strong>, which is
+          GPU nondeterminism alone. Two <em>independently trained</em> models at seeds 11 and 12
+          differ by <strong>3.1 pp</strong>. Method comparisons are the second case, and this
+          project quoted the first as "the floor" for part of one session, which understated the
+          relevant noise sixteenfold.
+        </p>
+      </div>
+      <div class="prose">
+        <h3>Which is why DPO cannot be quoted as a number</h3>
+        <p>
+          Trained from two baselines that were identically configured and scored within 0.2 pp of
+          each other, DPO gave <strong>+4.18 pp (z = 2.83)</strong> once and
+          <strong>−0.27 pp</strong> the other time. The disagreement is twenty times the
+          evaluation floor, so it is not measurement noise. <strong>The variability is in
+          training.</strong> DPO can help by a wide margin; a single run's gain turns out to be a
+          property of that run.
+        </p>
+      </div>
+    </div>
+
+    <div class="prose" style="margin-top:14px">
+      <div class="note">
+        The best agent in the whole grid is a plain supervised fine-tune that happened to train at
+        the better learning rate: 57.7% resolution and 0.01% invalid calls, beating every
+        post-trained variant. It is not a post-training result. It is the absence of one.
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:8px">
+      <div class="figtitle">The complete grid</div>
+      <div class="figsub">All eight arms, n = 2,200 each. Bonferroni threshold for the 56 comparisons is z &gt; 3.0.</div>
+      <div class="tblwrap" id="t-grid"></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= HOW ================= -->
+<section id="how">
+  <div class="wrap">
+    <div class="eyebrow">How it works</div>
+    <div class="prose">
+      <h2>Split the stack where the agent actually operates</h2>
+      <p class="lede">
+        Post-training needs thousands of resettable, seeded, parallel episodes with verifiable
+        rewards. A real Kubernetes cluster gives none of those: episodes take minutes, never
+        reset cleanly, and are nondeterministic, so the same action earns different rewards on
+        different runs. That is fatal for DPO preference pairs and GRPO advantages alike.
+      </p>
+      <p>
+        So the split is made at the API boundary, which is exactly where an agent works anyway.
+        The control plane is <strong>real</strong>. The kubelet is replaced by a deterministic
+        workload simulator that computes pod status from declared physics. What that buys:
+        sub-second resets, hundreds of parallel episodes per node, bit-exact reproducibility
+        from a seed, and rewards that are <em>computed</em> rather than graded.
+      </p>
+    </div>
+
+    <div class="card" style="margin-top:34px">
+      <div class="figtitle">The closed loop</div>
+      <div class="figsub">Each arrow is a real artifact on disk. The last one closes it: failures found in evaluation become the next round's training data.</div>
+      <svg id="c-arch" class="chart" role="img" aria-label="Architecture diagram: a seeded incident generator feeds a Kubernetes environment, exposed through an MCP gateway with a perturbation layer, worked by an agent harness, graded by an executable verifier, curated into trajectories, used for SFT, DPO and GRPO, then served and evaluated, with failures cycling back to the generator."></svg>
+    </div>
+
+    <h3 style="margin-top:44px; margin-bottom:16px">What is real, and what is simulated</h3>
+    <div class="layers">
+      <div class="layer">
+        <div><strong>etcd · apiserver · controller-manager · scheduler</strong></div>
+        <span class="pill real">real</span>
+        <div class="why">Genuine CRDs, RBAC, admission, watch and reconcile. Deployment→ReplicaSet→Pod is real, and so are scheduling, taints and <span class="mono">Unschedulable</span>. v1.31.4, as unprivileged user processes.</div>
+      </div>
+      <div class="layer">
+        <div><strong>MCP protocol</strong></div>
+        <span class="pill real">real</span>
+        <div class="why">The reference <span class="mono">mcp</span> library over JSON-RPC. A standard MCP client drives this environment unchanged.</div>
+      </div>
+      <div class="layer">
+        <div><strong>kubelet / container runtime</strong></div>
+        <span class="pill sim">simulated</span>
+        <div class="why">Pod status computed from declared workload physics: resource fit, image validity, config presence, probe configuration. Deterministic and instant.</div>
+      </div>
+      <div class="layer">
+        <div><strong>Traffic, health, metrics, logs</strong></div>
+        <span class="pill sim">simulated</span>
+        <div class="why">Health is a pure function of cluster state, which is what makes the verifier exact rather than approximate.</div>
+      </div>
+      <div class="layer">
+        <div><strong>The expert</strong></div>
+        <span class="pill sim">scripted</span>
+        <div class="why">Not a model. It is the reference ceiling and the SFT demonstration source: 91.4% resolution over 4,010 episodes, and always reported as a scripted policy.</div>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:36px">
+      <div>
+        <h3>Rewards nothing judges</h3>
+        <p style="font-size:15px;color:var(--ink-2)">Every term is read from live cluster state, a JSON Schema, or the gateway's call log.</p>
+<pre><code>score = 2.0·resolved
+      + 0.5·root_cause_correct
+      + 0.4·validated
+      + 0.2·recovered
+      − 0.05·unnecessary_calls
+      − 0.3·invalid_calls
+      − 0.8·unsafe_actions
+      − 0.1·over_budget</code></pre>
+        <p style="font-size:14.5px;color:var(--ink-3)">
+          The unsafe penalty is sized so that a <em>well-formed forbidden</em> action scores below
+          emitting nothing parseable at all (−0.5 against 0.0). A smaller one would leave the model
+          better off confidently deleting a pod than staying quiet, which is the wrong lesson for an
+          agent holding production credentials. A test asserts that ordering.
+        </p>
+      </div>
+      <div>
+        <h3>Robustness to tool-schema shift</h3>
+        <p style="font-size:15px;color:var(--ink-2)">
+          Retention = resolution under the perturbation ÷ that variant's own clean resolution, so
+          the tool surface is the only thing that varies.
+        </p>
+        <div class="tblwrap" id="t-perturb"></div>
+        <p style="font-size:14.5px;color:var(--ink-3);margin-top:16px">
+          Post-trained models are far more robust than base to a renamed tool, a renamed argument,
+          and distractor tools. They learned to <em>read</em> the schema rather than recall names
+          from training. Nobody survives a tool that <strong>disappears</strong>: even a policy
+          reading the schema perfectly retains 0.74, because a withdrawn tool cannot be called by
+          anyone.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SERVING ================= -->
+<section id="serving">
+  <div class="wrap">
+    <div class="eyebrow">Serving</div>
+    <div class="prose">
+      <h2>Prefix caching does not just help agent workloads; it compounds with them</h2>
+      <p class="lede">
+        One L40S, Qwen3-8B, with the real 36-tool system prompt, at 32-way concurrency. The
+        synthetic conversation deepens exactly as an episode does, so the shared prefix grows
+        while new tokens per turn stay small.
+      </p>
+    </div>
+
+    <figure class="card" style="margin-top:34px">
+      <div class="figtitle">Cost per unit of prompt, against conversation depth</div>
+      <div class="figsub">Milliseconds of p50 latency per 1,000 prompt tokens. Lower is better.</div>
+      <div class="legend" id="lg-cache"></div>
+      <svg class="chart" id="c-cache" role="img" aria-label="Line chart: without prefix caching, cost per thousand prompt tokens stays flat near 4,000 ms as conversation depth grows; with caching it falls from 870 to 300 ms."></svg>
+      <button class="tbtn" data-table="t-cache">Show the numbers</button>
+      <div class="tblwrap" id="t-cache" hidden></div>
+      <figcaption>
+        Uncached, the cost per token is <strong>flat</strong>. Every turn re-reads the whole
+        conversation, so total work scales with depth. Cached, it <strong>falls</strong>, because
+        the reused prefix becomes an ever-larger share of the prompt. End to end that is 12.8× on
+        p50 latency at 20 turns and 18× on throughput. Multi-LoRA on one engine adds a second
+        effect that is behavioural rather than architectural: the SFT adapter serves 2.1× faster
+        than base, because it emits a short tool call where base emits a long
+        <span class="mono">&lt;think&gt;</span> block.
+      </figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ================= RIGOR ================= -->
+<section id="rigor">
+  <div class="wrap">
+    <div class="eyebrow">Why believe any of it</div>
+    <div class="prose">
+      <h2>The same discipline retracted five of this project's own claims</h2>
+      <p class="lede">
+        Each of these was published in this repository, then contradicted by a later run and
+        withdrawn, along with the defect that caused it and the assertion that now prevents it.
+        The withdrawn trajectories are quarantined, not deleted.
+      </p>
+    </div>
+
+    <div class="retract" style="margin-top:30px">
+      <div class="r-row">
+        <div class="r-claim">"DPO improves resolution by +8.2 pp"</div>
+        <div class="r-truth">+2.1 pp under adequate power, and never significance-tested when first published. Winner's curse: the effect shrank monotonically as n grew while z stayed pinned near 1.5.</div>
+      </div>
+      <div class="r-row">
+        <div class="r-claim">"More preference pairs produce a better policy"</div>
+        <div class="r-truth">A 437-pair replication scored <em>identically</em> to the 88-pair run. The original +11.0 pp was run-to-run variance, and the difference had never been tested.</div>
+      </div>
+      <div class="r-row">
+        <div class="r-claim">"Episode-GRPO damages the tool-call format SFT taught"</div>
+        <div class="r-truth">An artifact of an adapter initialised two versions behind its own training data. The mechanism story was plausible, internally consistent and entirely wrong; a weight-digest lineage check caught it.</div>
+      </div>
+      <div class="r-row">
+        <div class="r-claim">"One extra SFT epoch outweighs every post-training method"</div>
+        <div class="r-truth">Confounded. Isolated, the epoch alone is −4.1 pp; the gap belonged to a difference between the two adapters.</div>
+      </div>
+      <div class="r-row">
+        <div class="r-claim">"Seed variance is 15.6 pp and swamps every comparison"</div>
+        <div class="r-truth">It was the <strong>learning rate</strong>. No launcher ever forwarded <span class="mono">--seed</span>, so every adapter this project ever produced had trained at seed 0. The seed had never been varied at all.</div>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:40px">
+      <div class="prose">
+        <h3>The guards are in the code, not the prose</h3>
+        <p>
+          A claim in a document is worth what the assertion behind it is worth. The report script
+          refuses to render a partial grid. One test asserts every tool count quoted in the docs
+          matches the registry; another that the serving numbers are recomputable from their raw
+          artifacts. Training records a weight digest of its base adapter, which is how the
+          withdrawn GRPO run was caught. <code>build-datasets</code> refuses to overwrite the
+          corpora the published results were trained on.
+        </p>
+        <p>
+          And since the seed defect: a test asserts that every result-bearing argument a trainer
+          accepts is reachable from its launcher. Its first version was defective in exactly the
+          way it exists to prevent. It searched the raw file, and the comment explaining the fix
+          contained the flag, so deleting the real argument left it passing. It strips comments
+          now, and the failure was verified by deletion.
+        </p>
+      </div>
+      <div class="prose">
+        <h3>What the project does not claim</h3>
+        <p>
+          <strong>Any ordering among SFT, DPO and the two GRPO variants.</strong> Every arm is a
+          single training run, and with a 3.1 pp floor between independently trained models,
+          method effects of 2–5 pp sit inside it. The grid establishes that post-training works.
+          It cannot establish which method is best, and resolving that needs several seeds per arm.
+        </p>
+        <p>
+          <strong>Anything about a second base model.</strong> Everything here is Qwen3-8B.
+        </p>
+        <p>
+          <strong>Live cloud behaviour.</strong> The S3 paths are tested against <code>moto</code>
+          and the EKS overlay renders and diffs in tests. Neither has been run against a real
+          account, and the page says so rather than implying otherwise.
+        </p>
+        <div class="note" style="margin-top:24px">
+          Every increase in rigour moved the answer toward "no measurable difference", right up until
+          the learning rate was matched. At that point DPO reappeared on one baseline and not the
+          other. Both halves of that belong in the record.
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <div class="flinks">
+      <a href="https://github.com/yupengtang/MCP-AgentGym">Repository</a>
+      <a href="https://github.com/yupengtang/MCP-AgentGym/blob/main/reports/EXPERIMENTS.md">Experiment log</a>
+      <a href="https://github.com/yupengtang/MCP-AgentGym/blob/main/DESIGN.md">Design document</a>
+      <a href="https://github.com/yupengtang/MCP-AgentGym/blob/main/PROJECT.md">Design decisions</a>
+    </div>
+    <p style="margin:0">
+      MCP-AgentGym is a verifiable Kubernetes incident gym for post-training and serving
+      tool-using agents. Built by <a href="https://yupengtang.github.io/">Yupeng Tang</a>.
+      MIT licensed. Every number on this page was produced by running the code in the
+      repository; the ones that were later withdrawn are listed above.
+    </p>
+  </div>
+</footer>
+
+<div class="tip" id="tip" role="status" aria-live="polite"></div>
+
+<script>
+/* ---------------- theme ---------------- */
+(function(){
+  var root=document.documentElement, btn=document.getElementById('theme');
+  try{ var saved=localStorage.getItem('agentgym-theme'); if(saved) root.setAttribute('data-theme',saved); }catch(e){}
+  btn.addEventListener('click',function(){
+    var cur=root.getAttribute('data-theme');
+    if(!cur) cur = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    var next = cur==='dark' ? 'light' : 'dark';
+    root.setAttribute('data-theme',next);
+    try{ localStorage.setItem('agentgym-theme',next); }catch(e){}
+    redraw();
+  });
+})();
+
+/* ---------------- helpers ---------------- */
+var NS='http://www.w3.org/2000/svg';
+function el(n,a){var e=document.createElementNS(NS,n); for(var k in a){ if(a[k]!=null) e.setAttribute(k,a[k]); } return e;}
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim();}
+var tip=document.getElementById('tip');
+function showTip(e,html){ tip.innerHTML=html; tip.style.opacity=1; moveTip(e); }
+function moveTip(e){
+  var x=e.clientX+14, y=e.clientY+14, r=tip.getBoundingClientRect();
+  if(x+r.width>innerWidth-12) x=e.clientX-r.width-14;
+  if(y+r.height>innerHeight-12) y=e.clientY-r.height-14;
+  tip.style.left=x+'px'; tip.style.top=y+'px';
+}
+function hideTip(){ tip.style.opacity=0; }
+function bindTip(node,html){
+  node.addEventListener('mouseenter',function(e){showTip(e,html)});
+  node.addEventListener('mousemove',moveTip);
+  node.addEventListener('mouseleave',hideTip);
+}
+function legend(id,items){
+  var c=document.getElementById(id); if(!c) return; c.innerHTML='';
+  items.forEach(function(it){
+    var d=document.createElement('span'); d.className='lg'+(it.line?' line':'');
+    var i=document.createElement('i'); i.style.background=it.color;
+    d.appendChild(i); d.appendChild(document.createTextNode(it.label)); c.appendChild(d);
+  });
+}
+function table(id,head,rows,hiIdx){
+  var c=document.getElementById(id); if(!c) return;
+  var h='<table><thead><tr>'+head.map(function(t,i){return '<th'+(i===0?'':'')+'>'+t+'</th>'}).join('')+'</tr></thead><tbody>';
+  rows.forEach(function(r,ri){
+    h+='<tr'+(hiIdx!=null&&hiIdx===ri?' class="hi"':'')+'>'+r.map(function(v,i){
+      return '<td'+(i===0?'':' class="num"')+'>'+v+'</td>';
+    }).join('')+'</tr>';
+  });
+  c.innerHTML=h+'</tbody></table>';
+}
+document.querySelectorAll('.tbtn').forEach(function(b){
+  b.addEventListener('click',function(){
+    var t=document.getElementById(b.dataset.table);
+    t.hidden=!t.hidden; b.textContent=t.hidden?'Show the numbers':'Hide the numbers';
+  });
+});
+
+/* ---------------- data ---------------- */
+var D={
+  trade:{
+    splits:['In-distribution','Held-out faults','Unseen topology','Compositional'],
+    base:[33.4,65.8,24.6,22.4],
+    trained:[71.3,38.2,52.0,40.8]
+  },
+  atten:{
+    s:[1.00,0.75,0.50],
+    dpo:[36.7,50.8,72.5],
+    sft:[35.8,null,70.0],
+    labels:['0 / 114','8 / 112','24 / 56']
+  },
+  variance:[
+    {k:'Learning rate, 5e-5 → 1e-4', v:14.23, z:'+9.54'},
+    {k:'DPO on baseline A',           v:4.18,  z:'+2.83'},
+    {k:'Training seed, 11 → 12',      v:-3.09, z:'−2.06'},
+    {k:'DPO on baseline B',           v:-0.27, z:'−0.18'},
+    {k:'Nondeterminism, same seed',   v:-0.18, z:'−0.12'}
+  ],
+  cache:{
+    turns:[2,5,10,20],
+    off:[3781,4065,4165,3847],
+    on:[870,566,396,300],
+    tokens:[3735,6768,11823,21943],
+    p50off:['14,123 ms','27,511 ms','49,239 ms','84,418 ms'],
+    p50on:['3,250 ms','3,833 ms','4,687 ms','6,576 ms']
+  }
+};
+
+/* ---------------- chart 1: grouped bars ---------------- */
+function drawTrade(){
+  var svg=document.getElementById('c-trade'); svg.innerHTML='';
+  var W=svg.clientWidth||900, narrow=W<620, H=narrow?420:360;
+  var m={t:26,r:16,b:56,l:narrow?40:46};
+  var iw=W-m.l-m.r, ih=H-m.t-m.b, max=80;
+  svg.setAttribute('viewBox','0 0 '+W+' '+H); svg.setAttribute('height',H);
+  var y=function(v){return m.t+ih-(v/max)*ih;};
+  var g=el('g',{class:'grid'});
+  for(var v=0;v<=max;v+=20){
+    g.appendChild(el('line',{x1:m.l,x2:W-m.r,y1:y(v),y2:y(v)}));
+    var t=el('text',{x:m.l-9,y:y(v)+4,'text-anchor':'end',class:'ax'}); t.textContent=v+'%'; g.appendChild(t);
+  }
+  svg.appendChild(g);
+
+  var n=D.trade.splits.length, band=iw/n;
+  var barW=Math.min(30,(band-22)/2), gap=2;
+  var C1=css('--s2'), C2=css('--s1');
+  D.trade.splits.forEach(function(sp,i){
+    var cx=m.l+band*i+band/2;
+    [[D.trade.base[i],C1,'base, untrained',-1],[D.trade.trained[i],C2,'best trained (SFT 3ep + DPO)',1]].forEach(function(d){
+      var val=d[0], x=cx+(d[3]<0 ? -barW-gap/2 : gap/2), h=(val/max)*ih;
+      var r=el('rect',{x:x,y:y(val),width:barW,height:h,fill:d[1],rx:4});
+      r.style.transition='opacity .12s'; svg.appendChild(r);
+      var lab=el('text',{x:x+barW/2,y:y(val)-9,'text-anchor':'middle',class:'vlab'});
+      lab.textContent=val.toFixed(1); svg.appendChild(lab);
+      var hit=el('rect',{x:x-3,y:m.t,width:barW+6,height:ih,class:'hit'});
+      bindTip(hit,'<b>'+sp+'</b><br>'+d[2]+'<br><span class="dim">resolved</span> '+val.toFixed(1)+'%');
+      hit.addEventListener('mouseenter',function(){r.style.opacity=.78});
+      hit.addEventListener('mouseleave',function(){r.style.opacity=1});
+      svg.appendChild(hit);
+    });
+    var words=sp.split(' ');
+    var tx=el('text',{x:cx,y:m.t+ih+24,'text-anchor':'middle',class:'ax'});
+    if(narrow&&words.length>1){
+      tx.setAttribute('y',m.t+ih+22);
+      words.forEach(function(w,wi){
+        var ts=el('tspan',{x:cx,dy:wi?14:0}); ts.textContent=w; tx.appendChild(ts);
+      });
+    } else { tx.textContent=sp; }
+    svg.appendChild(tx);
+  });
+  svg.appendChild(el('line',{x1:m.l,x2:W-m.r,y1:y(0),y2:y(0),class:'baseline'}));
+
+  legend('lg-trade',[{label:'base, untrained',color:C1},{label:'best trained (SFT 3ep + DPO)',color:C2}]);
+  table('t-trade',['Split','base, untrained','best trained','Δ'],
+    D.trade.splits.map(function(sp,i){
+      var d=D.trade.trained[i]-D.trade.base[i];
+      return [sp,D.trade.base[i].toFixed(1)+'%',D.trade.trained[i].toFixed(1)+'%',(d>0?'+':'−')+Math.abs(d).toFixed(1)+' pp'];
+    }).concat([['All splits (pooled)','36.3%','52.5%','+16.2 pp']]));
+}
+
+/* ---------------- chart 2: attenuation lines ---------------- */
+function drawAtten(){
+  var svg=document.getElementById('c-atten'); svg.innerHTML='';
+  var W=svg.clientWidth||900, H=W<620?330:360;
+  var m={t:26,r:W<620?22:130,b:56,l:46};
+  var iw=W-m.l-m.r, ih=H-m.t-m.b, max=80, min=20;
+  svg.setAttribute('viewBox','0 0 '+W+' '+H); svg.setAttribute('height',H);
+  var xs=[1.00,0.75,0.50];
+  var x=function(s){return m.l+((1.00-s)/0.50)*iw;};
+  var y=function(v){return m.t+ih-((v-min)/(max-min))*ih;};
+
+  var g=el('g',{class:'grid'});
+  for(var v=min;v<=max;v+=20){
+    g.appendChild(el('line',{x1:m.l,x2:W-m.r,y1:y(v),y2:y(v)}));
+    var t=el('text',{x:m.l-9,y:y(v)+4,'text-anchor':'end',class:'ax'}); t.textContent=v+'%'; g.appendChild(t);
+  }
+  svg.appendChild(g);
+  xs.forEach(function(s){
+    var t=el('text',{x:x(s),y:m.t+ih+24,'text-anchor':'middle',class:'ax'});
+    t.textContent='s = '+s.toFixed(2); svg.appendChild(t);
+  });
+  var xl=el('text',{x:m.l+iw/2,y:H-10,'text-anchor':'middle',class:'axlab'});
+  xl.textContent='ADAPTER SCALE  ·  s = 1 IS THE TRAINED MODEL, s = 0 IS THE BASE'; svg.appendChild(xl);
+
+  var C1=css('--s1'), C2=css('--s3'), SURF=css('--surface');
+  [['dpo',D.atten.dpo,C1,'DPO adapter'],['sft',D.atten.sft,C2,'SFT adapter']].forEach(function(series){
+    var vals=series[1], color=series[2], name=series[3];
+    var pts=[]; xs.forEach(function(s,i){ if(vals[i]!=null) pts.push([x(s),y(vals[i]),s,vals[i]]); });
+    var d=pts.map(function(p,i){return (i?'L':'M')+p[0]+' '+p[1]}).join(' ');
+    svg.appendChild(el('path',{d:d,fill:'none',stroke:color,'stroke-width':2,
+      'stroke-linecap':'round','stroke-linejoin':'round',
+      'stroke-dasharray':series[0]==='sft'?'6 5':null}));
+    pts.forEach(function(p){
+      svg.appendChild(el('circle',{cx:p[0],cy:p[1],r:6,fill:color,stroke:SURF,'stroke-width':2}));
+      var hit=el('circle',{cx:p[0],cy:p[1],r:16,class:'hit'});
+      var li=xs.indexOf(p[2]);
+      bindTip(hit,'<b>'+name+'</b><br><span class="dim">s =</span> '+p[2].toFixed(2)+
+        '<br><span class="dim">held-out resolved</span> '+p[3].toFixed(1)+'%'+
+        (series[0]==='dpo'?'<br><span class="dim">labels emitted</span> '+D.atten.labels[li]:''));
+      svg.appendChild(hit);
+    });
+    // End labels: the two series converge at the right edge, so the upper one is
+    // labelled above its point and the lower one below, never nudged into each other.
+    var last=pts[pts.length-1], up=(series[0]!=='sft');
+    if(W>=620){
+      var lt=el('text',{x:last[0]+14,y:last[1]+(up?-15:20),class:'vlab'});
+      lt.textContent=name; svg.appendChild(lt);
+      var lv=el('text',{x:last[0]+14,y:last[1]+(up?-1:34),class:'ax'});
+      lv.textContent=last[3].toFixed(1)+'%'; svg.appendChild(lv);
+    } else {
+      var lv2=el('text',{x:last[0],y:last[1]+(up?-14:26),'text-anchor':'end',class:'vlab'});
+      lv2.textContent=last[3].toFixed(1)+'%'; svg.appendChild(lv2);
+    }
+    var first=pts[0];
+    var fv=el('text',{x:first[0]+(W<620?6:10),y:first[1]+(up?-12:22),class:'ax','text-anchor':'start'});
+    fv.textContent=first[3].toFixed(1)+'%'; svg.appendChild(fv);
+  });
+
+  legend('lg-atten',[
+    {label:'DPO adapter, held-out resolution',color:C1,line:true},
+    {label:'SFT adapter, independent replication',color:C2,line:true}
+  ]);
+  table('t-atten',['Adapter scale s','DPO: held-out resolved','DPO: root cause','DPO: labels emitted','SFT: held-out resolved'],[
+    ['1.00 (trained)','36.7%','0.0%','0 / 114','35.8%'],
+    ['0.75','50.8%','6.7%','8 / 112','not run'],
+    ['0.50','72.5%','20.0%','24 / 56','70.0%']
+  ],2);
+}
+
+/* ---------------- chart 3: diverging bars ---------------- */
+function drawVar(){
+  var svg=document.getElementById('c-var'); svg.innerHTML='';
+  var W=svg.clientWidth||900, narrow=W<640;
+  var rows=D.variance, rh=narrow?58:46, H=rows.length*rh+(narrow?86:72);
+  var m={t:narrow?48:34,r:narrow?16:74,b:28,l:narrow?16:236};
+  var iw=W-m.l-m.r;
+  svg.setAttribute('viewBox','0 0 '+W+' '+H); svg.setAttribute('height',H);
+  var lo=-6, hi=16;
+  var x=function(v){return m.l+((v-lo)/(hi-lo))*iw;};
+  var zero=x(0), C_POS=css('--s1'), C_NEG=css('--s2'), NEU=css('--neutral');
+
+  // seed-floor band, labelled above it so the label never meets the axis ticks
+  var bandTop=m.t+4;
+  svg.appendChild(el('rect',{x:x(-3.1),y:bandTop,width:x(3.1)-x(-3.1),height:rows.length*rh-2,
+    fill:css('--bg-3'),opacity:.55,rx:4}));
+  var bl=el('text',{x:(x(-3.1)+x(3.1))/2,y:bandTop-8,'text-anchor':'middle',class:'axlab',fill:css('--ink-3')});
+  bl.textContent=narrow?'± 3.1 pp FLOOR':'± 3.1 pp SEED FLOOR'; svg.appendChild(bl);
+
+  // axis ticks
+  var g=el('g',{class:'grid'}), axY=m.t+rows.length*rh;
+  [-5,0,5,10,15].forEach(function(v){
+    if(v!==0) g.appendChild(el('line',{x1:x(v),x2:x(v),y1:bandTop,y2:axY}));
+    var t=el('text',{x:x(v),y:axY+22,'text-anchor':'middle',class:'ax'});
+    t.textContent=(v>0?'+':'')+v+' pp'; g.appendChild(t);
+  });
+  svg.appendChild(g);
+  svg.appendChild(el('line',{x1:zero,x2:zero,y1:bandTop,y2:axY,stroke:NEU,'stroke-width':1}));
+
+  rows.forEach(function(r,i){
+    var cy=m.t+i*rh+(narrow?34:rh/2), bh=Math.min(22,rh-24);
+    var pos=r.v>0, color=pos?C_POS:C_NEG;
+    var bx=pos?zero:x(r.v), bw=Math.abs(x(r.v)-zero);
+    if(narrow){
+      var kt=el('text',{x:m.l,y:m.t+i*rh+14,class:'vlab'}); kt.textContent=r.k; svg.appendChild(kt);
+    } else {
+      var kt2=el('text',{x:m.l-16,y:cy+4,'text-anchor':'end',class:'vlab'}); kt2.textContent=r.k; svg.appendChild(kt2);
+    }
+    var rect=el('rect',{x:bx,y:cy-bh/2,width:Math.max(bw,1.5),height:bh,fill:color,rx:3});
+    rect.style.transition='opacity .12s'; svg.appendChild(rect);
+    var vt=el('text',{x:pos?bx+bw+9:bx-9,y:cy+4,'text-anchor':pos?'start':'end',class:'vlab'});
+    vt.textContent=(pos?'+':'−')+Math.abs(r.v).toFixed(2); svg.appendChild(vt);
+    var hit=el('rect',{x:m.l,y:cy-rh/2,width:iw,height:rh,class:'hit'});
+    bindTip(hit,'<b>'+r.k+'</b><br><span class="dim">Δ resolution</span> '+(pos?'+':'−')+Math.abs(r.v).toFixed(2)+
+      ' pp<br><span class="dim">z =</span> '+r.z+
+      '<br><span class="dim">'+(Math.abs(r.v)<3.1?'inside the seed floor':'clears the seed floor')+'</span>');
+    hit.addEventListener('mouseenter',function(){rect.style.opacity=.75});
+    hit.addEventListener('mouseleave',function(){rect.style.opacity=1});
+    svg.appendChild(hit);
+  });
+
+  table('t-var',['Source of variation','Δ resolution','z','Inside the 3.1 pp floor?'],
+    rows.map(function(r){
+      return [r.k,(r.v>0?'+':'−')+Math.abs(r.v).toFixed(2)+' pp',r.z,Math.abs(r.v)<3.1?'yes':'no'];
+    }),0);
+}
+
+/* ---------------- chart 4: cache lines ---------------- */
+function drawCache(){
+  var svg=document.getElementById('c-cache'); svg.innerHTML='';
+  var W=svg.clientWidth||900, narrow=W<620, H=narrow?330:360;
+  var m={t:26,r:narrow?22:104,b:56,l:56};
+  var iw=W-m.l-m.r, ih=H-m.t-m.b, max=4500;
+  svg.setAttribute('viewBox','0 0 '+W+' '+H); svg.setAttribute('height',H);
+  var T=D.cache.turns;
+  var x=function(t){return m.l+(T.indexOf(t)/(T.length-1))*iw;};
+  var y=function(v){return m.t+ih-(v/max)*ih;};
+
+  var g=el('g',{class:'grid'});
+  for(var v=0;v<=max;v+=1500){
+    g.appendChild(el('line',{x1:m.l,x2:W-m.r,y1:y(v),y2:y(v)}));
+    var t=el('text',{x:m.l-9,y:y(v)+4,'text-anchor':'end',class:'ax'});
+    t.textContent=v.toLocaleString(); g.appendChild(t);
+  }
+  svg.appendChild(g);
+  T.forEach(function(tn){
+    var t=el('text',{x:x(tn),y:m.t+ih+24,'text-anchor':'middle',class:'ax'});
+    t.textContent=tn+' turns'; svg.appendChild(t);
+  });
+  var C1=css('--s2'), C2=css('--s1'), SURF=css('--surface');
+  [[D.cache.off,C1,'without prefix cache','off'],[D.cache.on,C2,'with prefix cache','on']].forEach(function(s){
+    var vals=s[0], color=s[1], name=s[2];
+    var d=T.map(function(tn,i){return (i?'L':'M')+x(tn)+' '+y(vals[i])}).join(' ');
+    // area wash under the cached line to show the falling cost
+    svg.appendChild(el('path',{d:d,fill:'none',stroke:color,'stroke-width':2,
+      'stroke-linecap':'round','stroke-linejoin':'round'}));
+    T.forEach(function(tn,i){
+      svg.appendChild(el('circle',{cx:x(tn),cy:y(vals[i]),r:5,fill:color,stroke:SURF,'stroke-width':2}));
+      var hit=el('circle',{cx:x(tn),cy:y(vals[i]),r:18,class:'hit'});
+      bindTip(hit,'<b>'+tn+' turns</b> · '+name+'<br><span class="dim">'+
+        D.cache.tokens[i].toLocaleString()+' prompt tokens</span><br>'+
+        vals[i].toLocaleString()+' ms per 1k tokens<br><span class="dim">p50</span> '+
+        (s[3]==='off'?D.cache.p50off[i]:D.cache.p50on[i]));
+      svg.appendChild(hit);
+    });
+    var lx=x(T[T.length-1]), ly=y(vals[vals.length-1]);
+    if(!narrow){
+      var lt=el('text',{x:lx+13,y:ly+(s[3]==='off'?-2:4),class:'vlab'});
+      lt.textContent=s[3]==='off'?'no cache':'cached'; svg.appendChild(lt);
+      var lv=el('text',{x:lx+13,y:ly+(s[3]==='off'?15:21),class:'ax'});
+      lv.textContent=vals[vals.length-1].toLocaleString()+' ms'; svg.appendChild(lv);
+    } else {
+      var lv2=el('text',{x:lx,y:ly+(s[3]==='off'?-14:22),'text-anchor':'end',class:'vlab'});
+      lv2.textContent=vals[vals.length-1].toLocaleString(); svg.appendChild(lv2);
+    }
+  });
+
+  legend('lg-cache',[
+    {label:'without prefix cache',color:C1,line:true},
+    {label:'with prefix cache',color:C2,line:true}
+  ]);
+  table('t-cache',['Turns','Prompt tokens','p50 without cache','p50 with cache','Speed-up','ms / 1k without','ms / 1k with'],
+    T.map(function(tn,i){
+      var sp=(parseFloat(D.cache.p50off[i].replace(/[^0-9.]/g,''))/parseFloat(D.cache.p50on[i].replace(/[^0-9.]/g,''))).toFixed(1);
+      return [tn,D.cache.tokens[i].toLocaleString(),D.cache.p50off[i],D.cache.p50on[i],sp+'×',
+              D.cache.off[i].toLocaleString(),D.cache.on[i].toLocaleString()];
+    }),3);
+}
+
+/* ---------------- architecture diagram ---------------- */
+function drawArch(){
+  var svg=document.getElementById('c-arch'); svg.innerHTML='';
+  var W=svg.clientWidth||900, narrow=W<700;
+  var boxes=[
+    {t:'Incident generator',s:'14 fault families, seeded, held-out splits'},
+    {t:'Kubernetes environment',s:'real apiserver · simulated kubelet, mesh, telemetry'},
+    {t:'MCP gateway',s:'36 typed tools + schema-shift perturbation layer'},
+    {t:'Agent harness',s:'plan → act → verify → recover → stop'},
+    {t:'Executable verifier',s:'multi-objective reward read from cluster state'},
+    {t:'Post-training',s:'QLoRA SFT · DPO · action-GRPO · episode-GRPO'},
+    {t:'Serving & evaluation',s:'vLLM prefix cache, multi-LoRA · ID / OOD / schema shift'}
+  ];
+  var bh=narrow?62:58, gapY=narrow?18:20, padX=narrow?14:22;
+  var bw=narrow?W-2*padX:Math.min(430,W-2*padX);
+  var x0=(W-bw)/2, loopW=narrow?12:40;
+  var H=boxes.length*(bh+gapY)-gapY+46;
+  svg.setAttribute('viewBox','0 0 '+W+' '+H); svg.setAttribute('height',H);
+
+  var INK=css('--ink'), INK3=css('--ink-3'), RULE=css('--rule-2'),
+      SURF=css('--surface-2'), ACC=css('--accent');
+
+  var defs=el('defs');
+  var mk=el('marker',{id:'arw',viewBox:'0 0 10 10',refX:9,refY:5,markerWidth:6,markerHeight:6,orient:'auto-start-reverse'});
+  mk.appendChild(el('path',{d:'M0 0L10 5L0 10z',fill:RULE})); defs.appendChild(mk);
+  var mk2=el('marker',{id:'arw2',viewBox:'0 0 10 10',refX:9,refY:5,markerWidth:6,markerHeight:6,orient:'auto-start-reverse'});
+  mk2.appendChild(el('path',{d:'M0 0L10 5L0 10z',fill:ACC})); defs.appendChild(mk2);
+  svg.appendChild(defs);
+
+  boxes.forEach(function(b,i){
+    var y=20+i*(bh+gapY);
+    svg.appendChild(el('rect',{x:x0,y:y,width:bw,height:bh,rx:9,fill:SURF,stroke:RULE,'stroke-width':1}));
+    var t=el('text',{x:x0+18,y:y+(narrow?24:23),fill:INK,'font-size':14.5,'font-weight':600});
+    t.textContent=b.t; svg.appendChild(t);
+    var s=el('text',{x:x0+18,y:y+(narrow?43:41),fill:INK3,'font-size':12});
+    s.textContent=b.s; svg.appendChild(s);
+    if(i<boxes.length-1){
+      svg.appendChild(el('line',{x1:W/2,x2:W/2,y1:y+bh+3,y2:y+bh+gapY-4,
+        stroke:RULE,'stroke-width':1.5,'marker-end':'url(#arw)'}));
+    }
+  });
+
+  // feedback loop: last box -> first box
+  var yTop=20+bh/2, yBot=20+(boxes.length-1)*(bh+gapY)+bh/2;
+  var rx=x0+bw+loopW/2;
+  var d='M'+(x0+bw)+' '+yBot+' L'+rx+' '+yBot+' L'+rx+' '+yTop+' L'+(x0+bw+4)+' '+yTop;
+  svg.appendChild(el('path',{d:d,fill:'none',stroke:ACC,'stroke-width':1.5,
+    'marker-end':'url(#arw2)','stroke-linejoin':'round'}));
+  if(!narrow){
+    var lt=el('text',{x:rx+9,y:(yTop+yBot)/2,fill:ACC,'font-size':11.5,'letter-spacing':'.06em',
+      transform:'rotate(90 '+(rx+9)+' '+((yTop+yBot)/2)+')','text-anchor':'middle'});
+    lt.textContent='NEW FAILURE CASES BECOME TRAINING DATA'; svg.appendChild(lt);
+  }
+}
+
+/* ---------------- static tables ---------------- */
+function staticTables(){
+  table('t-grid',['Variant','Resolved','Root cause','Invalid calls'],[
+    ['SFT 2 epochs, seed 1 (no post-training)','57.7%','48.9%','0.01%'],
+    ['SFT 3 epochs + DPO-309','52.5%','51.8%','0.32%'],
+    ['SFT 3 epochs','50.3%','50.6%','0.19%'],
+    ['SFT 2 epochs + DPO-435','44.3%','41.5%','0.18%'],
+    ['SFT 2 epochs + episode-GRPO','44.2%','40.5%','0.28%'],
+    ['SFT 2 epochs + action-GRPO','43.0%','38.5%','0.28%'],
+    ['SFT 2 epochs, seed A (the published baseline)','42.1%','36.9%','0.35%'],
+    ['base, untrained','36.3%','37.6%','26.32%']
+  ],0);
+  table('t-perturb',['Variant','Rename','Arg rename','+ Required arg','Distractors','Server dropout'],[
+    ['expert (ceiling)','1.04','1.04','1.02','1.02','0.74'],
+    ['base','0.82','1.00','0.77','0.77','0.50'],
+    ['SFT','1.12','1.21','0.76','1.15','0.56'],
+    ['SFT + DPO','1.09','1.18','0.88','1.29','0.62']
+  ],3);
+}
+
+/* ---------------- boot ---------------- */
+function redraw(){ drawTrade(); drawAtten(); drawVar(); drawCache(); drawArch(); }
+function boot(){ staticTables(); redraw(); }
+if(document.readyState==='complete') boot();
+else addEventListener('load',boot);
+var rt; addEventListener('resize',function(){ clearTimeout(rt); rt=setTimeout(redraw,140); });
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){ setTimeout(redraw,50); });
+</script>
+</body>
+</html>
