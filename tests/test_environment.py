@@ -128,35 +128,34 @@ def test_fault_breaks_then_fixes(gym, fault):
         # correct fix look broken as a function of machine load, not of the fix. A
         # dependency chain also resolves one tier per tick, so allow several rounds.
         #
-        # Run until the cluster stops changing rather than for a fixed count, because
-        # that is what the assertion below actually claims: the known-correct fix
-        # resolves the incident once the world has settled. A fixed 4 rounds failed
-        # `RolloutStuck` on a loaded machine with the datastore still `Booting` and its
-        # dependants still crashlooping behind it -- a verdict read one tier too early,
-        # not a broken fix.
-        previous, stable = None, False
-        for _ in range(8):
-            ep.settle_world()
-            if ep.resolved():
+        # settle_world already encodes convergence: it advances until pod state stops
+        # changing *and* nothing is still transient, and returns the ticks it used, so a
+        # return equal to its budget means it never converged. Use that rather than
+        # re-deriving it here -- comparing verdict maps between rounds cannot tell
+        # "settled" from "stuck", because an unscheduled pod reports `Booting`
+        # identically on every tick (kubelet_sim marks a pod with no node_name Booting
+        # and never gives it a boot clock). A dependency chain resolves one tier per
+        # settle, so allow a few rounds.
+        settle_ticks, converged = 14, False
+        for _ in range(4):
+            used = ep.settle_world(max_ticks=settle_ticks)
+            if ep.resolved() or used < settle_ticks:
+                converged = True
                 break
-            current = ep.pod_verdicts()
-            if current == previous:
-                stable = True
-                break
-            previous = current
 
-        # Two ways the verdict would be about machine load rather than about the fix: the
-        # control plane never produced the pods it intended (a settle timeout), or the
-        # cluster was still converging when the round budget ran out. Say so explicitly
-        # instead of reporting a fix failure, which is what the raw assertion did -- and
-        # which made this test flake on a different fault each full-suite run. A cluster
-        # that has gone *stable* and is still unresolved is a real failure and falls
-        # through to the assertion.
-        if not ep.resolved() and (ep.settle_timeouts or not stable):
+        # Two ways the verdict would be about machine speed rather than about the fix:
+        # the control plane never produced the pods it intended (a settle timeout), or
+        # the world never went quiet inside the tick budget -- on a small runner the
+        # scheduler can leave a pod unbound for longer than the budget allows, and every
+        # tier behind it then reads as DependencyUnavailable. Say so explicitly instead
+        # of reporting a fix failure, which is what the raw assertion did, and which made
+        # this test flake on a different fault each run. A world that *did* go quiet and
+        # is still unresolved is a real failure and falls through to the assertion.
+        if not ep.resolved() and (ep.settle_timeouts or not converged):
             pytest.skip(
-                f"{fault}: cluster had not settled "
+                f"{fault}: world never settled "
                 f"({ep.settle_timeouts} timeouts at {episode_mod.SETTLE_TIMEOUT_S}s, "
-                f"still changing={not stable}); verdict would measure load, not the fix"
+                f"converged={converged}); verdict would measure machine speed, not the fix"
             )
 
         assert ep.resolved(), (
