@@ -19,3 +19,11 @@ vllm-*.log
 # Slurm writes job logs into the repo root as <jobname>-<jobid>.out
 *-[0-9]*.out
 vllm-*.log
+
+# Site-local paths (copy env.local.sh.example); never committed.
+env.local.sh
+
+# Internal working notes and one-off operator scripts.
+.claude/
+Session_Handoff.txt
+restore_deleted_models.sh

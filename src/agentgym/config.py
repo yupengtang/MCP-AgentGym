@@ -11,7 +11,10 @@ def _p(env: str, default: str) -> Path:
     return Path(os.environ.get(env, default)).expanduser()
 
 
-AGENTGYM_HOME = _p("AGENTGYM_HOME", "/storage/ice-shared/mgt6655/storage/mcp-agentgym")
+# Runs, datasets and artifacts are large and belong off the repo. The default keeps a
+# fresh checkout working with no configuration; a cluster should point AGENTGYM_HOME at
+# scratch or shared storage instead (see env.sh).
+AGENTGYM_HOME = _p("AGENTGYM_HOME", "~/.agentgym")
 AGENTGYM_REPO = _p("AGENTGYM_REPO", str(Path(__file__).resolve().parents[2]))
 BIN_DIR = _p("AGENTGYM_BIN", str(AGENTGYM_HOME / "bin"))
 RUNTIME_DIR = _p("AGENTGYM_RUNTIME", f"{os.environ.get('TMPDIR', '/tmp')}/{os.environ.get('USER', 'user')}/agentgym-runtime")

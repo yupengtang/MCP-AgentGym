@@ -5,7 +5,7 @@ set -euo pipefail
 
 K8S_VERSION="${K8S_VERSION:-v1.31.4}"
 ETCD_VERSION="${ETCD_VERSION:-v3.5.16}"
-DEST="${AGENTGYM_BIN:-${AGENTGYM_HOME:-/storage/ice-shared/mgt6655/storage/mcp-agentgym}/bin}"
+DEST="${AGENTGYM_BIN:-${AGENTGYM_HOME:-$HOME/.agentgym}/bin}"
 
 mkdir -p "$DEST"
 cd "$DEST"
