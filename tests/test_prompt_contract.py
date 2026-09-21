@@ -16,12 +16,18 @@ import json
 from pathlib import Path
 
 import pytest
-from transformers import AutoTokenizer
 
 from agentgym.harness.prompts import render_tool_catalog, system_prompt
 from agentgym.mcp import perturb as perturb_mod
 from agentgym.mcp.perturb import SUITES
 from agentgym.mcp.tools import REGISTRY
+
+# The tokenizer is the whole point of this suite: it renders the chat template the tool
+# schema has to survive, which is the invariant the OpenAI-field bug violated. Without
+# transformers there is nothing to assert, so skip rather than fail at collection -- the
+# same treatment torch gets in test_episode_grpo.py. A `pip install -e .[dev]` checkout
+# (which is what CI builds) has no transformers; `.[train]` does.
+AutoTokenizer = pytest.importorskip("transformers").AutoTokenizer
 
 TEMPLATE = Path("src/agentgym/train/agentgym_chat_template.jinja")
 
