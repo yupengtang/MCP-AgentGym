@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -31,18 +32,40 @@ from safetensors.torch import load_file, save_file
 WEIGHTS = "adapter_model.safetensors"
 
 
-def scale_adapter(src: Path, dst: Path, scale: float) -> int:
-    """Copy `src` to `dst` with every lora_B tensor multiplied by `scale`."""
+def _layer_of(name: str) -> int | None:
+    """The transformer block index a parameter belongs to, if it has one."""
+    m = re.search(r"\.layers\.(\d+)\.", name)
+    return int(m.group(1)) if m else None
+
+
+def scale_adapter(src: Path, dst: Path, scale: float,
+                  layers: range | None = None) -> int:
+    """Copy `src` to `dst` with lora_B multiplied by `scale`.
+
+    With `layers`, only blocks in that range are scaled and the rest keep their trained
+    value. Uniform scaling shows *that* update magnitude moves a model along the
+    capability/generalization trade; scaling a band shows *where* in the network the
+    movement comes from, which is a different question and the one that distinguishes a
+    mechanism from a knob. A parameter with no block index (an embedding or head module,
+    if one is ever targeted) is left untouched under banded scaling rather than being
+    silently swept into the first band.
+    """
     if dst.exists():
         shutil.rmtree(dst)
     shutil.copytree(src, dst, ignore=shutil.ignore_patterns("checkpoint-*", "ref"))
 
     tensors = load_file(str(src / WEIGHTS))
     touched = 0
+    skipped_out_of_band = 0
     for name, tensor in tensors.items():
         # peft names these `...lora_B.weight` (or `.default.weight`); matching on the
         # substring keeps this robust to the naming variants across peft versions.
         if "lora_B" in name:
+            if layers is not None:
+                idx = _layer_of(name)
+                if idx is None or idx not in layers:
+                    skipped_out_of_band += 1
+                    continue
             tensors[name] = tensor * scale
             touched += 1
     if not touched:
@@ -51,8 +74,13 @@ def scale_adapter(src: Path, dst: Path, scale: float) -> int:
 
     save_file(tensors, str(dst / WEIGHTS), metadata={"format": "pt"})
     # Record the provenance so a scaled adapter can never be mistaken for a trained one.
-    (dst / "scaling.json").write_text(json.dumps(
-        {"source_adapter": str(src), "scale": scale, "scaled_tensors": touched}, indent=2))
+    (dst / "scaling.json").write_text(json.dumps({
+        "source_adapter": str(src),
+        "scale": scale,
+        "scaled_tensors": touched,
+        "layers": None if layers is None else [layers.start, layers.stop],
+        "unscaled_out_of_band": skipped_out_of_band,
+    }, indent=2))
     return touched
 
 
@@ -63,14 +91,24 @@ def main() -> None:
     p.add_argument("--out-root", type=Path, required=True, help="where scaled copies go")
     p.add_argument("--scales", type=float, nargs="+", default=[0.25, 0.5, 0.75])
     p.add_argument("--name", default=None, help="basename for outputs (default: src name)")
+    p.add_argument("--layers", default=None, metavar="START:STOP",
+                   help="scale only blocks [START, STOP). Default: every block.")
     args = p.parse_args()
+
+    layers = None
+    tag_suffix = ""
+    if args.layers:
+        start, _, stop = args.layers.partition(":")
+        layers = range(int(start), int(stop))
+        tag_suffix = f"-L{start}_{stop}"
 
     base = args.name or args.src.name
     for s in args.scales:
-        tag = f"{base}-s{str(s).replace('.', '')}"
+        tag = f"{base}-s{str(s).replace('.', '')}{tag_suffix}"
         dst = args.out_root / tag
-        n = scale_adapter(args.src, dst, s)
-        print(f"scale={s:<5} -> {dst}  ({n} lora_B tensors scaled)")
+        n = scale_adapter(args.src, dst, s, layers=layers)
+        where = "all blocks" if layers is None else f"blocks {layers.start}-{layers.stop - 1}"
+        print(f"scale={s:<5} {where:<18} -> {dst}  ({n} lora_B tensors scaled)")
 
 
 if __name__ == "__main__":
