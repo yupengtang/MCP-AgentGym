@@ -21,6 +21,12 @@ export HF_HUB_OFFLINE=1          # base weights are already in the shared cache
 export BITSANDBYTES_NOWELCOME=1
 
 MODEL="${MODEL:-${AGENTGYM_BASE_MODEL:-Qwen/Qwen3-8B}}"
+# The corpus was hardcoded to $AGENTGYM_DATA/sft. A held-out set other than `published`
+# has its own corpus built from its own pool, and training the default one against it
+# would put withheld families back into training -- the same silent failure the rollout
+# launcher had, and just as invisible: the run completes and only the held-out score is
+# wrong, in the flattering direction.
+DATASET="${DATASET:-$AGENTGYM_DATA/sft}"
 OUT="${OUT:-$AGENTGYM_ARTIFACTS/sft-qwen3-8b}"
 # The run name labelled every run "sft-qwen3-8b" no matter what was trained, which is
 # harmless while there is one base model and actively misleading once there are two: the
@@ -37,15 +43,15 @@ nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 # difference (5e-5 vs 1e-4). An env var nobody reads is indistinguishable from one that
 # does nothing, so the effective configuration is now printed where the log will show it.
 echo "--- effective SFT configuration ---"
-for kv in "MODEL=$MODEL" "EPOCHS=${EPOCHS:-3}" "LR=${LR:-1e-4}" "SEED=${SEED:-0}" \
+for kv in "MODEL=$MODEL" "DATASET=$DATASET" "HELDOUT=${AGENTGYM_HELDOUT_SET:-published}" "EPOCHS=${EPOCHS:-3}" "LR=${LR:-1e-4}" "SEED=${SEED:-0}" \
           "GRAD_ACCUM=${GRAD_ACCUM:-8}" "MAX_LEN=${MAX_LEN:-8192}" "LORA_R=${LORA_R:-32}"; do
   echo "  $kv"
 done
 
 python -m agentgym.train.sft_train \
   --model "$MODEL" \
-  --train-file "$AGENTGYM_DATA/sft/sft_train.jsonl" \
-  --eval-file  "$AGENTGYM_DATA/sft/sft_val.jsonl" \
+  --train-file "$DATASET/sft_train.jsonl" \
+  --eval-file  "$DATASET/sft_val.jsonl" \
   --output-dir "$OUT" \
   --epochs "${EPOCHS:-3}" \
   --lr "${LR:-1e-4}" \
