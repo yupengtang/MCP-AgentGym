@@ -12,7 +12,7 @@ import json
 import os
 from pathlib import Path
 
-TEMPLATE_PATH = Path(__file__).parent / "agentgym_chat_template.jinja"
+from agentgym.train.chat_template import template_for
 
 
 def parse_args() -> argparse.Namespace:
@@ -83,7 +83,7 @@ def main() -> None:
     tokenizer = AutoTokenizer.from_pretrained(args.model)
     # The template used here is the one vLLM is given at serving time, so the model is
     # never asked to generalise across a prompt-format change.
-    tokenizer.chat_template = TEMPLATE_PATH.read_text()
+    tokenizer.chat_template = template_for(args.model)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 

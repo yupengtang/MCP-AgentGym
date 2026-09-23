@@ -47,7 +47,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-TEMPLATE_PATH = Path(__file__).parent / "agentgym_chat_template.jinja"
+from agentgym.train.chat_template import template_for
 
 # Groups whose rewards are this close together carry no usable preference signal.
 MIN_REWARD_STD = 1e-6
@@ -378,7 +378,7 @@ def _train(args, examples: list[dict[str, Any]]) -> None:
     from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
     tokenizer = AutoTokenizer.from_pretrained(args.model)
-    tokenizer.chat_template = TEMPLATE_PATH.read_text()
+    tokenizer.chat_template = template_for(args.model)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 

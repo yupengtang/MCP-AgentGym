@@ -32,7 +32,7 @@ SUITES="${SUITES:-clean rename combined server_dropout}"
 SPLITS="${SPLITS:-in_distribution unseen_fault unseen_topology compositional}"
 PORT="${PORT:-8${SLURM_JOB_ID: -3}}"
 LIMIT="${LIMIT:-60}"
-TEMPLATE="src/agentgym/train/agentgym_chat_template.jinja"
+TEMPLATE="$(python -m agentgym.train.chat_template --model "$MODEL")"
 
 export HF_HUB_OFFLINE=1
 export VLLM_LOGGING_LEVEL=WARNING

@@ -35,7 +35,7 @@ run_engine () {
     --model "$MODEL" --served-model-name "$MODEL" \
     --port "$PORT" --host 127.0.0.1 \
     --max-model-len 32768 --gpu-memory-utilization 0.88 \
-    --chat-template src/agentgym/train/agentgym_chat_template.jinja \
+    --chat-template "$(python -m agentgym.train.chat_template --model "$MODEL")" \
     --disable-log-requests "$@" > "$AGENTGYM_RUNS/vllm-$label-$SLURM_JOB_ID.log" 2>&1 &
   ENGINE_PID=$!
   for i in $(seq 1 240); do

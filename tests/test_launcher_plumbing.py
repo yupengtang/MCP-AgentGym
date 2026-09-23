@@ -34,7 +34,14 @@ PAIRS = [
 # Arguments whose silent absence changes what a run means rather than merely how it runs.
 # `--seed` is the one that already caused a retraction; the others are here because a run
 # that quietly used the wrong value for any of them is not the run its name claims.
-RESULT_BEARING = {"--seed", "--lr", "--epochs"}
+#
+# `--model` was missing from this set until the second base model was added, and
+# train_sft.sbatch did not forward it: every run took whatever the trainer defaulted to
+# and was then labelled `sft-qwen3-8b` by a hardcoded --run-name. With one base model
+# that is invisible. With two it is the single most result-bearing argument there is, and
+# the failure it produces -- an adapter whose name disagrees with the weights it was
+# trained from -- is exactly the one the lineage digest was added to catch.
+RESULT_BEARING = {"--seed", "--lr", "--epochs", "--model"}
 
 
 def _without_comments(sh: str) -> str:

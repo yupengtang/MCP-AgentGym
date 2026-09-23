@@ -36,7 +36,7 @@ SPLITS="${SPLITS:-in_distribution unseen_fault}"
 # Separate OUT per sweep: mixing cells of different --limit into one directory
 # would let scale_report average populations of different size and composition.
 OUT="${OUT:-$AGENTGYM_RUNS/eval-scale}"
-TEMPLATE="src/agentgym/train/agentgym_chat_template.jinja"
+TEMPLATE="$(python -m agentgym.train.chat_template --model "$MODEL")"
 
 export HF_HUB_OFFLINE=1 VLLM_LOGGING_LEVEL=WARNING
 mkdir -p "$OUT"

@@ -36,7 +36,7 @@ import random
 from pathlib import Path
 from typing import Any
 
-TEMPLATE_PATH = Path(__file__).parent / "agentgym_chat_template.jinja"
+from agentgym.train.chat_template import template_for
 
 # Weights for the reward terms above.
 W_PARSED, W_KNOWN, W_VALID, W_EXPERT, W_UNSAFE = 1.0, 1.0, 1.0, 0.5, -3.5
@@ -193,7 +193,7 @@ def main() -> None:
     from trl import GRPOConfig, GRPOTrainer
 
     tokenizer = AutoTokenizer.from_pretrained(args.model)
-    tokenizer.chat_template = TEMPLATE_PATH.read_text()
+    tokenizer.chat_template = template_for(args.model)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
 

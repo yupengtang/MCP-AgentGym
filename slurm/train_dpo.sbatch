@@ -66,7 +66,7 @@ echo "=== phase 1: serve the SFT policy and sample $SAMPLES attempts per inciden
   --model "$MODEL" --served-model-name "$MODEL" \
   --port "$PORT" --host 127.0.0.1 \
   --max-model-len 32768 --gpu-memory-utilization 0.88 \
-  --chat-template src/agentgym/train/agentgym_chat_template.jinja \
+  --chat-template "$(python -m agentgym.train.chat_template --model "$MODEL")" \
   --enable-lora --lora-modules "sft=$ADAPTER" --max-lora-rank 32 \
   --disable-log-requests > "$AGENTGYM_RUNS/vllm-dpo-$SLURM_JOB_ID.log" 2>&1 &
 VLLM_PID=$!

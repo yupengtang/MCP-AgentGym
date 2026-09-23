@@ -1,0 +1,45 @@
+{#-
+  AgentGym training/serving chat template, Llama 3 header format.
+
+  Structurally identical to agentgym_chat_template.jinja (the ChatML one used for Qwen);
+  only the turn delimiters differ. Keeping the two in lockstep is the point: the
+  second-base-model arm exists to test whether the specialization/generalization trade-off
+  is a property of agent post-training or a property of Qwen3-8B, and that comparison is
+  only clean if the prompt construction, the loss masking and the stop-token handling are
+  the same on both sides.
+
+  The two deliberate properties carried over:
+
+  1. Assistant content is wrapped in {% generation %} markers so TRL's
+     assistant_only_loss masks the loss to the tokens the model is responsible for.
+     Training on tool output would teach the model to generate cluster state instead of
+     querying for it.
+
+     The <|eot_id|> stop token is INSIDE the generation block, and that placement is
+     load-bearing for exactly the reason recorded in the ChatML template: with it
+     outside, the mask covers the content but not the token that ends the turn, so the
+     model is never trained to stop. Teacher forcing hides this in every training metric
+     and it appears only at generation time, as turns that ramble to the sampling cap
+     without emitting a tool call.
+
+  2. No reasoning block is injected, and the same file is passed to vLLM at serving time
+     via --chat-template, so the trained prompt and the served prompt are byte-identical.
+
+  <|begin_of_text|> is deliberately NOT emitted here. Llama 3 tokenizers set
+  add_bos_token=True, so the BOS is contributed once at tokenization; emitting it in the
+  template as well produces a doubled BOS that shifts every position by one relative to
+  what the model saw in pre-training.
+-#}
+{%- for message in messages -%}
+{%- if message['role'] == 'assistant' -%}
+{{- '<|start_header_id|>assistant<|end_header_id|>\n\n' -}}
+{%- generation -%}
+{{- message['content'] + '<|eot_id|>' -}}
+{%- endgeneration -%}
+{%- else -%}
+{{- '<|start_header_id|>' + message['role'] + '<|end_header_id|>\n\n' + message['content'] + '<|eot_id|>' -}}
+{%- endif -%}
+{%- endfor -%}
+{%- if add_generation_prompt -%}
+{{- '<|start_header_id|>assistant<|end_header_id|>\n\n' -}}
+{%- endif -%}

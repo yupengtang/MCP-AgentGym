@@ -17,10 +17,15 @@ source env.sh
 module load cuda/12.6.1 2>/dev/null || true
 
 export TOKENIZERS_PARALLELISM=false
-export HF_HUB_OFFLINE=1          # Qwen3-8B is already in the shared cache
+export HF_HUB_OFFLINE=1          # base weights are already in the shared cache
 export BITSANDBYTES_NOWELCOME=1
 
+MODEL="${MODEL:-${AGENTGYM_BASE_MODEL:-Qwen/Qwen3-8B}}"
 OUT="${OUT:-$AGENTGYM_ARTIFACTS/sft-qwen3-8b}"
+# The run name labelled every run "sft-qwen3-8b" no matter what was trained, which is
+# harmless while there is one base model and actively misleading once there are two: the
+# MLflow run and the second model's adapter would disagree about what produced it.
+RUN_NAME="${RUN_NAME:-$(basename "$OUT")}"
 mkdir -p "$OUT"
 
 nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
@@ -32,12 +37,13 @@ nvidia-smi --query-gpu=name,memory.total --format=csv,noheader
 # difference (5e-5 vs 1e-4). An env var nobody reads is indistinguishable from one that
 # does nothing, so the effective configuration is now printed where the log will show it.
 echo "--- effective SFT configuration ---"
-for kv in "EPOCHS=${EPOCHS:-3}" "LR=${LR:-1e-4}" "SEED=${SEED:-0}" \
+for kv in "MODEL=$MODEL" "EPOCHS=${EPOCHS:-3}" "LR=${LR:-1e-4}" "SEED=${SEED:-0}" \
           "GRAD_ACCUM=${GRAD_ACCUM:-8}" "MAX_LEN=${MAX_LEN:-8192}" "LORA_R=${LORA_R:-32}"; do
   echo "  $kv"
 done
 
 python -m agentgym.train.sft_train \
+  --model "$MODEL" \
   --train-file "$AGENTGYM_DATA/sft/sft_train.jsonl" \
   --eval-file  "$AGENTGYM_DATA/sft/sft_val.jsonl" \
   --output-dir "$OUT" \
@@ -47,6 +53,6 @@ python -m agentgym.train.sft_train \
   --grad-accum "${GRAD_ACCUM:-8}" \
   --max-length "${MAX_LEN:-8192}" \
   --lora-r "${LORA_R:-32}" \
-  --run-name "sft-qwen3-8b"
+  --run-name "$RUN_NAME"
 
 echo "SFT complete -> $OUT"
