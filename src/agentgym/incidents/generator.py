@@ -24,8 +24,77 @@ from typing import Any
 from agentgym.incidents.faults import ALL_FAULTS, FAULTS_BY_NAME, FaultFamily
 from agentgym.incidents.topology import TOPOLOGIES_BY_NAME, Topology
 
-# Families withheld from training entirely, to measure transfer to a new failure mode.
-HELDOUT_FAULTS: frozenset[str] = frozenset({"NetworkPolicyDeny", "NodeNotReady"})
+# --- the held-out fault axis ------------------------------------------------
+#
+# The published trade-off (+16.2 pp in-catalogue against -27.6 pp held-out) rests on two
+# withheld families. Two is enough to measure an effect and not enough to say what the
+# effect is *about*: it cannot distinguish "post-training narrows the diagnosis prior" from
+# "post-training happens to be bad at NetworkPolicyDeny and NodeNotReady". Those have
+# different implications and the same numbers.
+#
+# So the withheld set is named rather than hardcoded, and families are grouped by the
+# mechanism an agent has to reason about. A held-out set that spans several groups tests
+# transfer to unfamiliar *mechanisms*; rotating disjoint folds tests whether the trade-off
+# is a property of the training procedure or of particular families.
+#
+# `published` stays the default and stays exactly what it was. Every number in the README
+# and the experiment log was measured against it, and a split that silently changed
+# underneath them would invalidate the lot while every table still rendered.
+
+FAULT_GROUPS: dict[str, frozenset[str]] = {
+    "workload-resources": frozenset({"OOMKilled", "KVCacheExhaustion"}),
+    "workload-config": frozenset({"BadConfigMap", "MissingSecret"}),
+    "workload-image": frozenset({"ImagePullBackOff"}),
+    "networking": frozenset({"ServiceSelectorMismatch", "NetworkPolicyDeny"}),
+    "probes": frozenset({"ReadinessProbeMisconfig"}),
+    "scheduling-capacity": frozenset({"NodeSelectorUnschedulable", "ResourceQuotaExhausted",
+                                      "NodeNotReady"}),
+    "controller-rollout": frozenset({"RolloutStuck", "ReplicasScaledToZero"}),
+    "cascade": frozenset({"CascadingDependencyDown"}),
+}
+
+HELDOUT_SETS: dict[str, frozenset[str]] = {
+    # The published split. Do not edit: it defines what every reported number means.
+    "published": frozenset({"NetworkPolicyDeny", "NodeNotReady"}),
+    # Six families across six mechanism groups. The breadth answer to "is the regression
+    # a property of two specific faults?"
+    "broad": frozenset({"NetworkPolicyDeny", "NodeNotReady", "BadConfigMap",
+                        "KVCacheExhaustion", "RolloutStuck", "ReadinessProbeMisconfig"}),
+    # Three disjoint folds, each withholding four families spanning at least three groups.
+    # OOMKilled and ReplicasScaledToZero are in no fold, so every fold keeps a trivial
+    # family in training and the corpus never loses its easiest demonstrations.
+    "fold_a": frozenset({"NetworkPolicyDeny", "NodeNotReady", "BadConfigMap",
+                         "RolloutStuck"}),
+    "fold_b": frozenset({"ServiceSelectorMismatch", "ResourceQuotaExhausted",
+                         "MissingSecret", "KVCacheExhaustion"}),
+    "fold_c": frozenset({"ReadinessProbeMisconfig", "NodeSelectorUnschedulable",
+                         "ImagePullBackOff", "CascadingDependencyDown"}),
+}
+
+DEFAULT_HELDOUT_SET = "published"
+
+
+def heldout_faults(name: str | None = None) -> frozenset[str]:
+    """Resolve a named held-out set, defaulting to the published one.
+
+    Selected by `AGENTGYM_HELDOUT_SET` so a whole corpus, training run and evaluation can
+    be pointed at a different fold without editing code -- but an unknown name raises
+    rather than falling back, because a typo that silently produced the published split
+    would report a fold's result under the wrong label.
+    """
+    import os
+
+    key = name or os.environ.get("AGENTGYM_HELDOUT_SET", DEFAULT_HELDOUT_SET)
+    try:
+        return HELDOUT_SETS[key]
+    except KeyError:
+        raise ValueError(
+            f"unknown held-out set {key!r}; known: {sorted(HELDOUT_SETS)}"
+        ) from None
+
+
+# The active set. Module-level so existing callers keep working unchanged.
+HELDOUT_FAULTS: frozenset[str] = heldout_faults()
 # Topology withheld from training, to measure transfer to a new application shape.
 HELDOUT_TOPOLOGIES: frozenset[str] = frozenset({"event-stream"})
 
