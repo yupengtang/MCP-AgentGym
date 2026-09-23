@@ -1424,6 +1424,91 @@ of the 1e-4 runs, and the three 1e-4 seeds cluster at 12.53 / 12.71 / 12.67 -- w
 34% smaller update, which is consistent with magnitude positioning a model on the trade,
 and is not on its own a demonstration of it.
 
+### The frontier across three seeds, and a reproducibility problem underneath it
+
+Three independently trained SFT adapters (seed 0/11/12, matched LR 1e-4, train losses
+0.0724-0.0728), each swept at s in {0, 0.25, 0.5, 0.75, 1.0} on the v2 5,000-incident
+pool, n = 100 per cell, 16 shards, max-steps 20. `scripts/frontier_report.py` refuses a
+partial grid; all 30 cells completed.
+
+| s | in-distribution (mean) | held-out (mean) | held-out spread across seeds |
+|---|---|---|---|
+| 0.00 (base) | 34.0% | 46.7% | 7 pp |
+| 0.25 | 41.3% | 53.7% | 9 pp |
+| **0.50** | 58.0% | **64.0%** | 11 pp |
+| 0.75 | 56.7% | 36.3% | 7 pp |
+| 1.00 (trained) | 70.7% | 38.3% | 3 pp |
+
+**The trade reproduces in all three runs.** In-distribution rises +40.0 / +38.0 / +32.0 pp
+from s=0 to s=1 (z = 6.20, 5.82, 4.78) while held-out falls -6.0 / -7.0 / -12.0 pp. The
+direction is unanimous, so the trade-off is a property of the procedure rather than of one
+training run, which is what the single-run version of this result could not establish. The
+held-out *loss* is not individually significant at n = 100 (z = -0.87, -1.00, -1.72); the
+published -27.6 pp carried z = -19.06 at n = 2,200, and nothing here contradicts it.
+
+**Attenuation is not monotone, and there is an interior optimum.** Held-out capability
+peaks at s = 0.5 in all three seeds (65 / 58 / 69%) and is *higher there than at either
+end* -- above the fully trained adapter by ~26 pp and above the untrained base by ~17 pp.
+At s = 0.5 in-distribution is 58.0% against base's 34.0%, so the half-scaled adapter beats
+the untrained model on **both** axes at once. Two things follow, and the second is a
+correction. First, "the sweep does not locate an optimum" is no longer accurate: it locates
+one near s = 0.5. Second, the published curve reported s = 0.75 at 50.8%, between its
+neighbours; here s = 0.75 sits at 36.3%, at or *below* s = 1.0 in all three seeds. Those
+disagree, and the section below is the reason to believe the disagreement rather than
+either number.
+
+### Greedy decoding is not reproducible across engine instances, and it cascades
+
+The base arm is the same untrained weights in all three sweeps -- no adapter is served for
+it -- run on the same 100 incidents at temperature 0.0 with the same step budget. Only the
+vLLM instance differs. It should be identical. It is not:
+
+| pair | outcome flips | identical tool sequence |
+|---|---|---|
+| seed1 vs realseed11 | 24/100 | 0/100 |
+| seed1 vs realseed12 | 21/100 | 1/100 |
+| realseed11 vs realseed12 | 21/100 | 0/100 |
+
+**The trajectory essentially never reproduces, and roughly a fifth of resolve/fail outcomes
+flip.** The aggregate rates (43 / 47 / 50%) look reassuringly close only because the flips
+very nearly cancel.
+
+The mechanism is visible in a single episode. On `nodenotready-batch-pipeline-c76f61b5`,
+with an identical `system_prompt_hash`, two runs agree on the first tool call and diverge
+on the second (`list_deployments` against `get_service_health`), then end 20 steps and 11
+steps later respectively. vLLM's continuous batching makes greedy decoding depend on batch
+composition, so one differing token early becomes a different investigation, a different
+number of turns, and a different verdict. An agent harness amplifies token-level
+nondeterminism into outcome-level nondeterminism in a way single-turn benchmarks do not.
+
+**What this invalidates and what it does not.** It does not invalidate within-sweep
+comparisons: every variant in a sweep was served by one engine, and the frontier's shape
+is a 17-26 pp effect against a ~7 pp instance spread. It does invalidate *paired,
+per-incident* comparison across runs, and it explains a discrepancy that would otherwise
+look like a result -- this sweep's base arm scores 43% on the same 100 held-out incidents
+where the published pool2 run scored 61%, same model, same prompt hash. That gap is the
+engine, not the model, and it is the reason the s = 0.75 disagreement above should not be
+read as either curve being wrong.
+
+It also means the run-to-run floor is not one number. The published 0.2 pp is a
+*same-configuration, large-n aggregate* floor, and it is real at that scope. At n = 100
+across engine instances the aggregate spread is ~7 pp, and the per-incident disagreement
+rate is ~22% at any n. Quoting the 0.2 pp figure for a small-n or a per-incident
+comparison understates the noise by more than an order of magnitude -- the same class of
+mistake as quoting a per-split gap as the run-to-run floor, recorded earlier in this file.
+
+**One secondary observation.** The trained adapter flips less than base (9-16% against
+21-24%) and reproduces its tool sequence 21 times in 100 on one pair, where base manages
+one. Post-training makes the policy more deterministic as well as more accurate, which is
+consistent with the invalid-call collapse: a model emitting a short confident tool call has
+far less room to diverge than one emitting a long reasoning block.
+
+**Not yet done.** Every number above is n = 100 per cell. The interior optimum is a 26 pp
+effect and survives the instance spread comfortably; the s = 0.75 dip is smaller and does
+not. Settling the shape of the curve needs the n = 2,200 treatment the published grid got,
+and a determinism check with a fixed batch size would separate batching from any remaining
+environment nondeterminism.
+
 ## 7. Open items
 
 Stated as open rather than quietly omitted.
