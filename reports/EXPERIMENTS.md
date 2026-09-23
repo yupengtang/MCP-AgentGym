@@ -1418,6 +1418,17 @@ it is a location, not a mechanism, and nothing here tests whether those are the 
 that *cause* the collapse. `scale_adapter.py --layers START:STOP` exists to ask that
 question directly and has not yet been run.
 
+**The same structural signature appears on a second architecture.** Llama-3.1-8B,
+trained on the same corpus with the same recipe (2 epochs, LR 1e-4, seed 0, train loss
+0.0495 against Qwen's 0.0728, eval loss 0.0202 against 0.0215), puts 81.3% of its update
+energy in the MLP (gate 39.7%, up 31.4%, down 10.2%) against Qwen's 83.3% (37.1 / 31.4 /
+14.8), and concentrates it in the upper blocks the same way (1.8x rise, plateau from block
+15 of 32; Qwen 2.7x, peak at block 35 of 36). Two architectures with different depths and
+different total update magnitudes (9.32 against 12.53) allocate that update across module
+types to within two percentage points. This is a statement about where SFT on this corpus
+puts its mass, not yet about behaviour: whether the trade-off itself replicates on Llama
+needs the frontier sweep, which has not been run.
+
 **The learning rate is a magnitude difference.** `sft-2ep-lr5e5` sits at 0.661x the norm
 of the 1e-4 runs, and the three 1e-4 seeds cluster at 12.53 / 12.71 / 12.67 -- within
 1.5% of each other. The dominant term in the variance budget (+14.23 pp, z = 9.54) is a
