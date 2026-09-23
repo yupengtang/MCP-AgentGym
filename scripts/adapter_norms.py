@@ -99,6 +99,54 @@ def adapter_update_norms(adapter: Path) -> dict:
             "n_pairs": len(rows), "total_fro": total, "rows": rows}
 
 
+def update_difference_norm(a1: Path, a2: Path) -> dict:
+    """||dW_1 - dW_2||_F, without materialising either update.
+
+    The same rank-space identity extends to a difference by stacking the factors:
+
+        s1*B1@A1 - s2*B2@A2 = [s1*B1  -s2*B2] @ [A1 ; A2]
+
+    so the concatenated factors are (d x 2r) and (2r x k) and the Gram trace is 2r x 2r.
+
+    This is the measurement that separates "this objective barely moved the weights" from
+    "these two adapters are the same file". Two runs whose totals agree to three decimals
+    in every module are either both sitting on their shared initialisation or are the
+    same checkpoint twice, and a norm on its own cannot tell those apart.
+    """
+    import torch
+    from safetensors.torch import load_file
+
+    def factors(a: Path):
+        cfg = json.loads((a / "adapter_config.json").read_text())
+        sc = cfg["lora_alpha"] / cfg["r"]
+        t = load_file(str(a / "adapter_model.safetensors"))
+        out = {}
+        for name in t:
+            if "lora_A" not in name:
+                continue
+            key = name.replace("lora_A", "*").replace(".default", "")
+            b_name = name.replace("lora_A", "lora_B")
+            if b_name in t:
+                out[key] = (t[name].double(), t[b_name].double(), sc)
+        return out
+
+    f1, f2 = factors(a1), factors(a2)
+    shared = sorted(set(f1) & set(f2))
+    rows = []
+    for key in shared:
+        a_1, b_1, s_1 = f1[key]
+        a_2, b_2, s_2 = f2[key]
+        bc = torch.cat([s_1 * b_1, -s_2 * b_2], dim=1)      # d x 2r
+        ac = torch.cat([a_1, a_2], dim=0)                   # 2r x k
+        gram = (bc.T @ bc) @ (ac @ ac.T)
+        fro = float(torch.clamp(torch.diagonal(gram).sum(), min=0.0).sqrt())
+        rows.append({"name": key, "layer": _layer_of(key),
+                     "module": _module_of(key), "fro": fro})
+    return {"a": str(a1), "b": str(a2), "shared_pairs": len(shared),
+            "only_in_a": len(set(f1) - set(f2)), "only_in_b": len(set(f2) - set(f1)),
+            "diff_fro": math.sqrt(sum(r["fro"] ** 2 for r in rows)), "rows": rows}
+
+
 def _summarise(res: dict) -> None:
     rows = res["rows"]
     print(f"\n=== {Path(res['adapter']).name} ===")
@@ -139,6 +187,8 @@ def main() -> None:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("adapters", nargs="+", type=Path)
     ap.add_argument("--json-out", type=Path, default=None)
+    ap.add_argument("--diff", nargs=2, type=Path, metavar=("A", "B"), default=None,
+                    help="also report ||dW_A - dW_B||, and it relative to each")
     args = ap.parse_args()
 
     out = []
@@ -159,6 +209,27 @@ def main() -> None:
             print(f"  {name:<34} {res['total_fro']:>9.3f}   {res['total_fro']/ref:>6.3f}x")
         print("\n  A scaled copy must come out at exactly its scale factor. If it does not,")
         print("  scale_adapter.py is not doing what the frontier sweep assumes it does.")
+
+    if args.diff:
+        a1, a2 = args.diff
+        d = update_difference_norm(a1, a2)
+        n1 = adapter_update_norms(a1)["total_fro"]
+        n2 = adapter_update_norms(a2)["total_fro"]
+        print("\n" + "=" * 72)
+        print("difference between two updates\n")
+        print(f"  A = {Path(d['a']).name}   ||dW_A|| = {n1:.3f}")
+        print(f"  B = {Path(d['b']).name}   ||dW_B|| = {n2:.3f}")
+        print(f"  shared pairs {d['shared_pairs']}"
+              f"  (only in A: {d['only_in_a']}, only in B: {d['only_in_b']})")
+        print(f"\n  ||dW_A - dW_B||_F = {d['diff_fro']:.3f}")
+        print(f"  relative to A: {d['diff_fro'] / max(n1, 1e-9):.4f}"
+              f"    relative to B: {d['diff_fro'] / max(n2, 1e-9):.4f}")
+        if d["diff_fro"] / max(n1, 1e-9) < 1e-4:
+            print("\n  These are the same update. Two differently-named adapters holding "
+                  "the same\n  weights is a lineage defect, not a result.")
+        else:
+            print("\n  Distinct updates. The relative figure is how far one moved from "
+                  "the other,\n  as a fraction of its own size.")
 
     if args.json_out:
         # rows are large; keep the summary and drop the per-pair detail

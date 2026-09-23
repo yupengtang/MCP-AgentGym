@@ -1360,6 +1360,70 @@ Withdrawn runs move to `runs/eval-withdrawn/<name>/` with a README recording wha
 measured, why they are invalid, and what supersedes them. Deleting them would make the
 retraction unverifiable; leaving them in place would make it ineffective.
 
+### Post-training barely moves the weights; reseeding relocates them entirely
+
+A LoRA update is `dW = (alpha/r) B@A`, so its size is readable off the adapter without
+running anything. `scripts/adapter_norms.py` computes `||dW||_F` per module and per layer,
+and the difference between two updates, via `||B@A||_F^2 = tr((B^T B)(A A^T))` -- both
+factors are r x r, so a 32x32 trace replaces a 4096x4096 product. In fp64, because fp32
+loses three digits to cancellation across the Gram trace (verified against the direct
+product: 1e-15 relative error against 5e-3).
+
+**The scaling tool does what the frontier assumes.** The attenuated copies come out at
+0.250x / 0.500x / 0.750x of the trained adapter, to three decimals. This is worth pinning
+rather than assuming: a monotone bug in the scale factor produces a monotone
+dose-response, so the shape of the attenuation curve is not evidence that the axis is
+right. `tests/test_scale_adapter.py` now asserts the arithmetic directly.
+
+**Distance from a method to its own starting point, as a fraction of its own size:**
+
+| comparison | distance, as a fraction of A's own size |
+|---|---|
+| action-GRPO vs its SFT init (`sft-qwen3-8b-v4`) | 0.51% |
+| episode-GRPO vs the same init | 0.99% |
+| DPO-on-seed2 vs its SFT init | 1.73% |
+| DPO-on-seed1 vs its SFT init | 1.99% |
+| **SFT seed 1 vs SFT seed 11**, same recipe | **125.2%** |
+
+Every post-training method in this project leaves the weights within 2% of where SFT put
+them. Two runs of the *same* SFT recipe, differing only in seed, end up 125% apart. The
+gap between those two facts is two orders of magnitude, and it is a weight-space account
+of the result the grid already showed behaviourally: method effects of 2-5 pp sit inside
+a 3.1 pp seed floor. In weight terms the methods are nearly stationary while reseeding
+relocates the model.
+
+**Which half of this is evidence, and which is not.** The direction matters and the two
+are not symmetric:
+
+  - The *small* numbers support a behavioural claim. An update that differs by 0.5-2%
+    cannot produce a large change in the function, so "these methods change the model
+    little" follows from them.
+  - The *large* number supports nothing on its own. This project has already measured
+    weight distance failing as a behavioural proxy, in this exact form: two
+    same-configuration runs sat 138% apart in relative lora_B norm while agreeing to
+    0.0005 in train loss and 0.2 pp in evaluation. The 125% here is that same phenomenon
+    measured over the full update, and the two seeds it compares agree to within 3.1 pp.
+    It is emphatically *not* evidence that the seeds behave differently.
+
+So the claim is one-directional: the methods are small moves, and the seed floor is not
+explained by the methods being large. Nothing here says reseeding produces a *better* or
+*different-behaving* model, only a distant one.
+
+**Where the update lives.** 83% of the update energy is in the MLP (`gate_proj` 37%,
+`up_proj` 31%, `down_proj` 15%) against ~17% across all four attention projections, and
+per-layer magnitude rises with depth (2.7x from block 0 to block 35, monotone in the
+upper half). The update concentrates in late-layer MLP. That is suggestive next to the
+label-prior collapse -- the same place a diagnosis prior would be expected to live -- but
+it is a location, not a mechanism, and nothing here tests whether those are the layers
+that *cause* the collapse. `scale_adapter.py --layers START:STOP` exists to ask that
+question directly and has not yet been run.
+
+**The learning rate is a magnitude difference.** `sft-2ep-lr5e5` sits at 0.661x the norm
+of the 1e-4 runs, and the three 1e-4 seeds cluster at 12.53 / 12.71 / 12.67 -- within
+1.5% of each other. The dominant term in the variance budget (+14.23 pp, z = 9.54) is a
+34% smaller update, which is consistent with magnitude positioning a model on the trade,
+and is not on its own a demonstration of it.
+
 ## 7. Open items
 
 Stated as open rather than quietly omitted.
