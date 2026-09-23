@@ -1481,8 +1481,15 @@ vLLM instance differs. It should be identical. It is not:
 | realseed11 vs realseed12 | 21/100 | 0/100 |
 
 **The trajectory essentially never reproduces, and roughly a fifth of resolve/fail outcomes
-flip.** The aggregate rates (43 / 47 / 50%) look reassuringly close only because the flips
-very nearly cancel.
+flip.** Taken three at a time the picture is sharper still: all three runs agree on the
+verdict for **67 of 100** incidents and produce the same tool sequence for **0 of 100**. A
+third of individual outcomes are not reproducible with identical weights. The aggregate
+rates (43 / 47 / 50%) look reassuringly close only because the flips very nearly cancel.
+
+`scripts/reproducibility_report.py` is the instrument, so this is re-measurable rather than
+an anecdote. It refuses to summarise an arm whose weights differ between runs, because
+disagreement there confounds serving nondeterminism with a real difference between models;
+`base` is the only arm in these sweeps that isolates the serving stack.
 
 The mechanism is visible in a single episode. On `nodenotready-batch-pipeline-c76f61b5`,
 with an identical `system_prompt_hash`, two runs agree on the first tool call and diverge
