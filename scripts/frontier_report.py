@@ -44,8 +44,24 @@ SPLITS = ["in_distribution", "unseen_fault"]
 SCALES: list[tuple[str, float]] = [
     ("base", 0.0), ("s025", 0.25), ("s05", 0.5), ("s075", 0.75), ("s10", 1.0),
 ]
-# Independently trained models differing only in seed (reports/EXPERIMENTS.md).
+# Two floors, and using the wrong one here was a defect in this script's first version.
+#
+# SEED_FLOOR_PP is the difference between independently *trained* models, measured at
+# n = 2,200 in a matched serving configuration (reports/EXPERIMENTS.md).
+#
+# ENGINE_FLOOR_PP is the difference between two runs of the *same weights* on the *same
+# incidents* at temperature 0, differing only in which vLLM instance served them. vLLM's
+# continuous batching makes greedy decoding depend on batch composition, and an agent
+# harness turns one divergent token into a different investigation: measured on the base
+# arm of three sweeps, the tool sequence reproduced 0-1 times in 100 and ~22% of verdicts
+# flipped, with aggregate rates spanning 7 pp at n = 100.
+#
+# Cross-seed cells here differ in BOTH the training seed and the engine instance, so the
+# floor that governs them is the larger of the two. Judging a 7 pp instance artefact
+# against a 3.1 pp training floor reports it as a real difference between seeds.
 SEED_FLOOR_PP = 3.1
+ENGINE_FLOOR_PP = 7.0
+COMPARISON_FLOOR_PP = max(SEED_FLOOR_PP, ENGINE_FLOOR_PP)
 
 
 def _z(pa: float, na: int, pb: float, nb: int) -> float:
@@ -209,7 +225,10 @@ def main() -> None:
     # ---- claim 3: one frontier, or one per run? ---------------------------
     print("\n" + "=" * 72)
     print("CLAIM 3  do the seeds trace the same frontier?")
-    print(f"         spread at each s, against the {SEED_FLOOR_PP} pp independent-run floor\n")
+    print(f"         spread at each s, against the {COMPARISON_FLOOR_PP:.1f} pp floor that "
+          f"governs these cells")
+    print(f"         (training seed {SEED_FLOOR_PP} pp and engine instance "
+          f"{ENGINE_FLOOR_PP} pp both vary here; the larger binds)\n")
     print(f"{'s':>5}  {'split':<17} {'mean':>7} {'spread':>8}   verdict")
     for variant, s in SCALES:
         for split in SPLITS:
@@ -218,13 +237,17 @@ def main() -> None:
             if len(vals) < 2:
                 continue
             spread = 100 * (max(vals) - min(vals))
-            inside = spread <= SEED_FLOOR_PP
+            # round before comparing: 0.50 - 0.43 is 7.000000000000001 in binary
+            # floating point, which flips a boundary cell to "exceeds" on nothing.
+            inside = round(spread, 6) <= COMPARISON_FLOOR_PP
             print(f"{s:5.2f}  {split:<17} {_pct(sum(vals) / len(vals)):>7} "
                   f"{spread:7.1f} pp   "
                   f"{'within the floor' if inside else 'EXCEEDS the floor'}")
-    print("\n  Points whose spread is within the floor are indistinguishable between runs:")
-    print("  the seeds are on one frontier there. Points outside it mean position along")
-    print("  the frontier is itself run-dependent, and must be reported per seed.")
+    print("\n  Points within the floor are indistinguishable between runs: the seeds are on")
+    print("  one frontier there. Points outside it are candidates for a genuine per-run")
+    print("  difference, but this design cannot attribute one, because the training seed and")
+    print("  the serving instance change together. Separating them needs the same adapter")
+    print("  evaluated on two engines, which the base arm supplies and the trained arms do not.")
 
     if args.json_out:
         args.json_out.write_text(json.dumps(
