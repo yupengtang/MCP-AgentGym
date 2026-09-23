@@ -680,6 +680,17 @@ footer a:hover{color:var(--accent); border-bottom-color:var(--accent)}
           and the EKS overlay renders and diffs in tests. Neither has been run against a real
           account, and the page says so rather than implying otherwise.
         </p>
+        <p>
+          <strong>That any single evaluation run is reproducible.</strong> The same untrained
+          weights, the same incidents, temperature 0, differing only in which vLLM instance
+          served them: the tool sequence reproduced in 0 to 1 episodes out of 100, and about a
+          fifth of resolve/fail verdicts flipped. Continuous batching makes greedy decoding
+          depend on batch composition, and an agent harness turns one divergent token into a
+          different investigation. Comparisons within one sweep are unaffected, since one engine
+          serves every arm; paired per-incident comparison across runs is not valid, and the
+          0.2 pp floor is a same-configuration large-n figure that understates small-n noise by
+          more than an order of magnitude.
+        </p>
         <div class="note" style="margin-top:24px">
           Every increase in rigour moved the answer toward "no measurable difference", right up until
           the learning rate was matched. At that point DPO reappeared on one baseline and not the

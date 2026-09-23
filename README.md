@@ -446,6 +446,19 @@ floor like every other method in the grid.
 
 Stated because a limitation you can name is worth more than one a reader finds.
 
+- **Greedy decoding does not reproduce across serving instances, and an agent harness
+  amplifies it.** The same untrained weights, on the same incidents, at temperature 0,
+  differing only in which vLLM instance served them: the tool sequence reproduced in 0 to 1
+  episodes out of 100, and about a fifth of resolve/fail verdicts flipped. Aggregate rates
+  agreed to within 7 pp only because the flips cancel. vLLM's continuous batching makes
+  greedy decoding depend on batch composition, and one divergent token early becomes a
+  different investigation and a different verdict. Consequences, in order of how easy they
+  are to get wrong: comparisons **within** one sweep are unaffected, because one engine
+  serves every arm; **paired, per-incident** comparison across runs is not valid at all; and
+  the 0.2 pp run-to-run floor quoted above is a same-configuration, large-n aggregate figure,
+  so applying it to a small-n or cross-instance comparison understates the noise by more than
+  an order of magnitude. See [reports/EXPERIMENTS.md](reports/EXPERIMENTS.md).
+
 - **The expert is formulaic.** SFT reaches eval-loss 0.0215 partly because scripted
   demonstrations follow a fixed investigation order per fault family. Low loss here indicates
   format acquisition, not diagnostic skill. That is why the OOD and perturbation tables, rather
