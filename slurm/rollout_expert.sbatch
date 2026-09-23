@@ -25,11 +25,19 @@ PERTURBATION="${PERTURBATION:-clean}"
 OUTDIR="${OUTDIR:-$AGENTGYM_RUNS/expert-$PERTURBATION}"
 mkdir -p "$OUTDIR"
 
+# Optional alternate incident pool. A held-out set other than `published` produces a
+# different corpus, and demonstrations for it have to come from that pool -- rolling out
+# the default pool would put withheld families back into the training data, which is
+# precisely the thing the split exists to prevent and would not show up anywhere except
+# as a held-out score that was implausibly good.
+INCIDENTS="${INCIDENTS:-}"
 echo "task $SLURM_ARRAY_TASK_ID on $(hostname) runtime=$AGENTGYM_RUNTIME"
+echo "  pool=${INCIDENTS:-<default>}  heldout_set=${AGENTGYM_HELDOUT_SET:-published}"
 
 python -m agentgym.cli rollout \
   --policy expert \
   --perturbation "$PERTURBATION" \
+  ${INCIDENTS:+--incidents "$INCIDENTS"} \
   --out "$OUTDIR/trajectories-$(printf '%03d' "$SLURM_ARRAY_TASK_ID").jsonl" \
   --gym-offset $((200 + SLURM_ARRAY_TASK_ID * 3)) \
   --max-steps 28
