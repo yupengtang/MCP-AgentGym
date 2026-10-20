@@ -2,6 +2,17 @@
 
 **A verifiable Kubernetes incident gym for post-training and serving tool-using agents.**
 
+[![ci](https://github.com/yupengtang/MCP-AgentGym/actions/workflows/ci.yml/badge.svg)](https://github.com/yupengtang/MCP-AgentGym/actions/workflows/ci.yml)
+[![license](https://img.shields.io/github/license/yupengtang/MCP-AgentGym)](LICENSE)
+![python](https://img.shields.io/badge/python-3.11%2B-blue)
+
+![A scripted agent fixing an OOMKilled incident through MCP tools on a real control plane](docs/demo.gif)
+
+*One episode, recorded on a laptop CPU in about 40 seconds: a real control plane comes up, a
+memory limit is set below the working set so the pods crash-loop, the agent diagnoses and
+patches it through MCP tools, and the verifier checks the live cluster before any reward is
+paid.*
+
 MCP-AgentGym runs a **real Kubernetes control plane** (etcd, apiserver, controller-manager,
 scheduler) as unprivileged user processes, and replaces the kubelet with a deterministic
 workload simulator. Incidents are injected from a seeded catalogue of 14 fault families, an
@@ -17,6 +28,30 @@ flavours of GRPO, serves the result through vLLM, and measures what survives.
 [Design document](DESIGN.md) ·
 [Experiment log](reports/EXPERIMENTS.md) ·
 [Design decisions](PROJECT.md)
+
+## Run it in a minute
+
+Linux on x86_64 and Python 3.11+. No root, no Docker, no GPU.
+
+```bash
+git clone https://github.com/yupengtang/MCP-AgentGym && cd MCP-AgentGym
+pip install -e .
+bash scripts/fetch_k8s_binaries.sh   # etcd + kube-* into ~/.agentgym/bin, once (~330 MB)
+bash scripts/demo.sh                 # the episode above
+```
+
+`FAULT=NetworkPolicyDeny bash scripts/demo.sh` breaks something else, and
+`PERTURBATION=rename bash scripts/demo.sh` replays the same incident with the tools renamed.
+Training and serving need GPUs and their own environments; see [Quickstart](#quickstart).
+
+## What it found
+
+![Training raises the resolve rate on seen fault families and lowers it on held-out ones; scaling the LoRA update back at serving time recovers the held-out rate](docs/tradeoff.png)
+
+Post-training an 8B model on this gym made it better on the fault families it was trained on
+and worse on the ones it wasn't, and the untrained model stayed the best agent on held-out
+faults. Scaling the LoRA update down after training, one knob at serving time, moves the model
+back along that trade. The details and every caveat follow.
 
 ---
 
