@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=agentgym-sft
-#SBATCH --partition=ice-gpu
+#SBATCH --partition=gpu
 # Explicit GPU model: the partition also contains 16GB V100s, which cannot hold an 8B
 # model at 8k context even in 4-bit.
 #SBATCH --gres=gpu:l40s:1

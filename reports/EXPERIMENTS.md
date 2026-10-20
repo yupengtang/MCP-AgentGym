@@ -1,7 +1,7 @@
 # MCP-AgentGym, experiment log
 
 Methodology and results. Every number here was produced by running the code in this
-repository on PACE ICE; nothing is estimated. Tables are regenerated with
+repository on a shared university HPC cluster; nothing is estimated. Tables are regenerated with
 `python -m agentgym.eval.report`.
 
 ---
@@ -1648,7 +1648,7 @@ Trajectories recorded before this field existed read 0. That is the absence of a
 not evidence that no timeouts occurred, and it is stated that way in the code and in the
 commit rather than quietly enjoyed.
 
-**No container runtime.** PACE ICE has no root, no Docker, and no `/etc/subuid` range, so
+**No container runtime.** The cluster has no root, no Docker, and no `/etc/subuid` range, so
 rootless Podman cannot map multiple UIDs and neither `kind` nor `k3s` will start. Running
 `etcd` + `kube-apiserver` + `kube-controller-manager` + `kube-scheduler` directly as user
 processes sidesteps the runtime entirely and keeps the API semantics that matter. Two

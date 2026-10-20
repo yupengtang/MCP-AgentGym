@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=agentgym-sweep
-#SBATCH --partition=ice-cpu
+#SBATCH --partition=cpu
 #SBATCH --array=0-11
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G

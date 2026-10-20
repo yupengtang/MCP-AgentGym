@@ -5,7 +5,7 @@ containers, no privileged ports. Each instance owns a disjoint port block and it
 etcd data directory, so many control planes run concurrently on one node -- that is what
 makes parallel episode rollout possible.
 
-Why this instead of kind/k3s: PACE ICE has no Docker and no /etc/subuid range, so
+Why this instead of kind/k3s: the HPC cluster has no Docker and no /etc/subuid range, so
 rootless Podman cannot map multiple UIDs and neither kind nor k3s can start. Running the
 components directly sidesteps the container runtime entirely while keeping the API
 semantics that actually matter (real objects, CRDs, RBAC, admission, watch/reconcile).

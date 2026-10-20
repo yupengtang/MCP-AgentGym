@@ -385,7 +385,7 @@ python -m agentgym.cli build-datasets  # SFT/DPO corpora + contamination check
 results were trained on specific corpora and silently regenerating them would invalidate
 every number above.
 
-Batch work on Slurm:
+Batch work on Slurm (the partition names in `slurm/` are generic; set them for your cluster):
 
 ```bash
 sbatch slurm/rollout_expert.sbatch            # 1,200 trajectories, CPU, ~5 min wall

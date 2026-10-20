@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=agentgym-norms
-#SBATCH --partition=ice-cpu
+#SBATCH --partition=cpu
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=48G
 #SBATCH --time=02:00:00

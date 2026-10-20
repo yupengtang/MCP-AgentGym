@@ -26,7 +26,7 @@ project that can be finished and one that stalls at 70%.
 **The original plan assumed real pods crashing in a real cluster.** That is wrong on two independent
 grounds, and the second one would still be wrong on a cloud budget:
 
-1. *It is not buildable on the target hardware.* PACE ICE gives no root, no Docker, and no
+1. *It is not buildable on the target hardware.* The shared HPC cluster gives no root, no Docker, and no
    `/etc/subuid` range, so rootless Podman cannot map multiple UIDs and neither `kind` nor `k3s`
    can start.
 2. *It is the wrong environment for post-training even where it is buildable.* Post-training needs

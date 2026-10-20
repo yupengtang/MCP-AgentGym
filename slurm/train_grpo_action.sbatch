@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=agentgym-actgrpo
-#SBATCH --partition=ice-gpu
+#SBATCH --partition=gpu
 #SBATCH --gres=gpu:l40s:1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=128G
