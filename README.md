@@ -57,8 +57,9 @@ back along that trade. The details and every caveat follow.
 
 ## The result: post-training on a closed catalogue is a trade, not an improvement
 
-`n = 2,200` per arm, on 5,000 incidents no model has seen (zero id overlap with training).
-Bonferroni threshold for the 42 comparisons reported is `z > 3.0`.
+`n = 2,200` per arm (700 in-distribution, 500 on each of the three held-out splits), on 5,000
+incidents no model has seen (zero id overlap with training). Bonferroni threshold for the 42
+comparisons reported is `z > 3.0`.
 
 | | in-distribution | **held-out faults** | unseen topology | compositional | **all** | invalid calls |
 |---|---|---|---|---|---|---|
@@ -71,11 +72,14 @@ what training buys   resolution          +16.2 pp        z = +10.96
                      root cause          +14.2 pp        z =  +9.57
                      invalid tool calls  26.3% → 0.3%    ~100×
 
-what it costs        held-out families   −27.6 pp        z = −19.06
+what it costs        held-out families   −27.6 pp        z =  −9.09   (n = 500 per arm)
 ```
 
 Both sides clear significance by a wide margin, and both dwarf every difference between
-post-training methods. **The untrained model is the best agent in this project on fault
+post-training methods. The held-out z was first published as −19.06, which used the
+2,200-episode arm size for a 500-episode split; −9.09 is the correct value. Across three
+independently seeded adapters the held-out drop is smaller, 6–12 pp
+([below](#across-three-seeds)), so read −27.6 pp as one run's size, not the procedure's. **The untrained model is the best agent in this project on fault
 families it was never trained for** (65.8% against 33–41% for everything trained), and it is
 the worst everywhere else.
 
@@ -99,8 +103,9 @@ by multi-LoRA:
 | 0.75 | 50.8% | 6.7% | 8 / 112 |
 | **0.50** | **72.5%** | **20.0%** | **24 / 56** |
 
-Monotone at every step, both adjacent comparisons significant (z = 3.55, z = 2.22),
-**z = 5.97 end-to-end**, and no measurable in-distribution cost (67.2% vs 65.6%, z = 0.27).
+Monotone at every step in this run (adjacent steps z = 2.22 and 3.55; the first is below the
+Bonferroni line), **z = 5.97 end-to-end**, and no measurable in-distribution cost (67.2% vs
+65.6%, z = 0.27).
 **It replicates on a second, independently trained adapter family to within 1.6 pp**: the
 SFT adapter recovers 35.8% → 70.0% (z = 5.65). Two policies trained by different objectives
 on different data collapse the same way and recover the same way, which is the strongest
@@ -108,6 +113,37 @@ available evidence that the cause is update *magnitude* rather than anything inc
 one checkpoint.
 
 One knob, applied after training has finished, moves a model along the specialization axis.
+
+### Across three seeds
+
+The numbers above are single runs. Three SFT adapters trained independently (seeds 0, 11,
+12, learning rate 1e-4) were each swept over five scales on the same pool, `n = 100` per
+cell, all 30 cells complete:
+
+| s | in-distribution (mean) | held-out (mean) | held-out spread across seeds |
+|---|---|---|---|
+| 0.00 (base) | 34.0% | 46.7% | 7 pp |
+| 0.25 | 41.3% | 53.7% | 9 pp |
+| **0.50** | 58.0% | **64.0%** | 11 pp |
+| 0.75 | 56.7% | 36.3% | 7 pp |
+| 1.00 (trained) | 70.7% | 38.3% | 3 pp |
+
+**The direction of the trade reproduces in every seed**: in-distribution rises 32 to 40 pp
+from s = 0 to s = 1 (z = 4.78 to 6.20), held-out falls 6 to 12 pp. **The size does not.** The
+held-out drop is far smaller than the published −27.6 pp and is not individually significant
+at this n (z = −0.87, −1.00, −1.72).
+
+**The curve is not monotone.** Held-out peaks at s = 0.5 in all three seeds (65 / 58 / 69%),
+above both the trained and the untrained model, and at that scale in-distribution is also
+well above base (58.0% vs 34.0%), so the half-scaled adapter beats base on both axes. The
+published s = 0.75 point (50.8%) does not reproduce: here it sits at 36.3%, at or below
+s = 1.0 in every seed.
+
+**Part of the disagreement is the serving stack, not the models.** The base arm, identical
+weights at temperature 0 on the same 100 incidents, scores 43% here against 61% in the
+published run; only the vLLM instance differs (see
+[Known limitations](#known-limitations)). Comparisons inside one sweep share an engine and
+stand; levels compared across sweeps do not.
 
 ## The variance budget: what actually moves the number
 
@@ -502,8 +538,10 @@ Stated because a limitation you can name is worth more than one a reader finds.
   the process layer (5/5) and asserted per fault family; it is not a claim about a production
   cluster.
 - **Post-training regresses on held-out fault families**: 38.2% against base's 65.8% at
-  n = 2,200. Diagnosed to label-prior collapse and reversible at serving time, but the sweep
-  does not locate an optimum, and the held-out axis is two fault families.
+  n = 500 per arm in the published run, 6 to 12 pp across three seeds at n = 100. Diagnosed
+  to label-prior collapse and reversible at serving time, with the held-out optimum near
+  s = 0.5 in every seed, but the held-out axis is two fault families. The broader held-out
+  sets defined in `incidents/generator.py` (`broad`, `fold_a` to `fold_c`) have not been run.
 - **Every method arm is a single training run.** With a 3.1 pp seed floor and method effects of
   2–5 pp, the grid establishes that post-training works and does not establish which method is
   best.

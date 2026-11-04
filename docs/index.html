@@ -306,7 +306,8 @@ footer a:hover{color:var(--accent); border-bottom-color:var(--accent)}
       <h2>Training buys capability inside the catalogue and spends it outside</h2>
       <p class="lede">
         Every model is evaluated on 5,000 incidents none of them has seen, at
-        <span class="mono">n&nbsp;=&nbsp;2,200</span> per arm, with zero id overlap with training.
+        <span class="mono">n&nbsp;=&nbsp;2,200</span> per arm (700 in-distribution, 500 on each held-out split),
+        with zero id overlap with training.
         The Bonferroni threshold for the 42 comparisons reported is <span class="mono">z&nbsp;&gt;&nbsp;3.0</span>.
       </p>
       <p>
@@ -326,7 +327,9 @@ footer a:hover{color:var(--accent); border-bottom-color:var(--accent)}
       <div class="tblwrap" id="t-trade" hidden></div>
       <figcaption>
         <strong>Held-out faults is the only split where training loses</strong>, and it loses by
-        27.6 pp (z = −19.06) against a 16.2 pp overall gain (z = +10.96). Invalid tool calls
+        27.6 pp (z = −9.09, n = 500 per arm) against a 16.2 pp overall gain (z = +10.96). The held-out z
+        was first published as −19.06, computed with the 2,200-episode arm size for a 500-episode
+        split. Across three seeds the held-out drop is 6 to 12 pp, so −27.6 pp is one run's size. Invalid tool calls
         collapse from 26.3% to 0.3% in the same move, a ~100× effect that nothing else in the
         project comes near.
       </figcaption>
@@ -341,7 +344,7 @@ footer a:hover{color:var(--accent); border-bottom-color:var(--accent)}
       </div>
       <div>
         <h4>What it costs</h4>
-        <div class="tline"><span class="l">Held-out fault families</span><span class="r neg">−27.6 pp<span class="z">z = −19.06</span></span></div>
+        <div class="tline"><span class="l">Held-out fault families</span><span class="r neg">−27.6 pp<span class="z">z = −9.09</span></span></div>
         <div class="tline"><span class="l">Never-demonstrated labels</span><span class="r neg">5.0% → 0.0%<span class="z">0 / 599</span></span></div>
         <div class="tline"><span class="l">Reversible after training?</span><span class="r pos">Yes<span class="z">see below</span></span></div>
       </div>
@@ -390,11 +393,11 @@ footer a:hover{color:var(--accent); border-bottom-color:var(--accent)}
       <div class="figtitle">Held-out resolution against adapter scale <span class="mono" style="font-weight:400;color:var(--ink-3)">s</span></div>
       <div class="figsub">Two independently trained adapter families, different objectives and different data, scaled the same way.</div>
       <div class="legend" id="lg-atten"></div>
-      <svg class="chart" id="c-atten" role="img" aria-label="Line chart: held-out resolution rises monotonically as the LoRA update is scaled down, from 36.7% at s=1.0 to 72.5% at s=0.5, replicated on a second adapter family."></svg>
+      <svg class="chart" id="c-atten" role="img" aria-label="Line chart: in the published run, held-out resolution rises as the LoRA update is scaled down, from 36.7% at s=1.0 to 72.5% at s=0.5, replicated on a second adapter family."></svg>
       <button class="tbtn" data-table="t-atten">Show the numbers</button>
       <div class="tblwrap" id="t-atten" hidden></div>
       <figcaption>
-        Monotone at every step, both adjacent comparisons significant (z = 3.55, z = 2.22),
+        Monotone at every step in this run (adjacent steps z = 2.22 and 3.55; the first is below the Bonferroni line),
         <strong>z = 5.97 end-to-end</strong>, and <strong>no measurable in-distribution cost</strong>
         (67.2% at s = 0.5 against 65.6% at s = 1.0, z = 0.27). The DPO and SFT families were trained
         by different objectives on different data, and they collapse the same way and recover to
@@ -405,8 +408,17 @@ footer a:hover{color:var(--accent); border-bottom-color:var(--accent)}
 
     <div class="prose">
       <p style="margin-top:34px">
-        <strong>What it does not establish.</strong> The sweep does not locate an optimum, and the
-        held-out axis is two fault families. A first pass predicted an in-distribution dip at
+        <strong>Across three seeds.</strong> Three independently seeded SFT adapters, each swept over
+        s in {0, 0.25, 0.5, 0.75, 1} at n = 100 per cell, reproduce the direction of the trade in
+        every seed (in-distribution +32 to +40 pp, held-out −6 to −12 pp, the latter not
+        individually significant). The curve is not monotone: held-out peaks at s = 0.5 in all
+        three seeds (mean 64.0%, against 46.7% for base and 38.3% trained), where in-distribution is
+        also well above base (58.0% vs 34.0%). The published s = 0.75 point does not reproduce
+        (36.3% against 50.8%). Part of that gap is the serving stack: the identical base weights
+        score 43% in this sweep and 61% in the published run on the same incidents.
+      </p>
+      <p>
+        <strong>What it does not establish.</strong> The held-out axis is two fault families. A first pass predicted an in-distribution dip at
         s = 0.75 that a powered confirmation run failed to reproduce. It halved and stayed
         non-significant, which is textbook regression to the mean, and it was written down as a
         caveat when that job was submitted rather than after it came back.
